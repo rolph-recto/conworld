@@ -76,16 +76,20 @@ class Container(Item):
         "inventory": False,
         "container": True
     }
-    LOOK_OPEN = "{description}. It is open."
-    LOOK_CLOSED = "{description}. It is closed."
-    LOOK_ITEMS = "{name} has these items inside it: "
-    LOOK_EMPTY = "{name} is open but it has nothing inside it."
-    OPEN = "You open {name}."
-    ALREADY_OPEN = "{name} is already open."
-    CLOSE = "You close {name}."
-    ALREADY_CLOSED = "{name} is already closed."
+    LOOK_OPEN = "{description} It is open."
+    LOOK_CLOSED = "{description} It is closed."
+    LOOK_ITEMS = "The {name} has these items inside it: {items}"
+    LOOK_EMPTY = "The {name} is open but it has nothing inside it."
+    OPEN = "You open the {name}."
+    ALREADY_OPEN = "The {name} is already open."
+    OPEN_LOCKED = "The {name} is locked."
+    CLOSE = "You close the {name}."
+    ALREADY_CLOSED = "The {name} is already closed."
+    UNLOCK = "You unlock the {name}."
+    ALREADY_UNLOCKED = "The {name} is already unlocked."
 
-    def __init__(self, name, synonyms=(), description="", properties={}):
+    def __init__(self, name, synonyms=(), description="", properties={},
+        opened=False, locked=False):
         super(Container, self).__init__(name, synonyms, description, properties)
         # template strings for printing
         self.text.update({
@@ -95,33 +99,87 @@ class Container(Item):
             "LOOK_EMPTY": Container.LOOK_EMPTY,
             "OPEN": Container.OPEN,
             "ALREADY_OPEN": Container.ALREADY_OPEN,
+            "OPEN_LOCKED": Container.OPEN_LOCKED,
             "CLOSE": Container.CLOSE,
-            "ALREADY_CLOSED": Container.ALREADY_CLOSED
+            "ALREADY_CLOSED": Container.ALREADY_CLOSED,
+            "UNLOCK": Container.UNLOCK,
+            "ALREADY_UNLOCKED": Container.ALREADY_UNLOCKED
         })
         self.items = []
-        self._opened = False
+        self._opened = opened
+        self._locked = locked
 
         # EVENTS
         # player opened this container
         self.on_open = Event()
         # player closed this container
         self.on_close = Event()
+        # player unlocked the container
+        self.on_unlock = Event()
 
+    # opened is read-only
     @property
     def opened(self):
         return self._opened
+
+    # locked is read-only
+    @property
+    def locked(self):
+        return self._locked
+
+    def look(self, describe_self=True, describe_items=True):
+        """
+        override Item.look() to include items inside the container if it is open
+        """
+        # print description
+        if describe_self:
+            if self._opened:
+                self.echo(self.text["LOOK_OPEN"]
+                    .format(description=self.description))
+            else:
+                self.echo(self.text["LOOK_CLOSED"]
+                    .format(description=self.description))
+
+        # print items in the container if it is open
+        if describe_items and self._opened:
+            opened_str = ""
+            items_str = ""
+
+            # multiple items in container
+            if len(self.items) > 1:
+                opened_str = self.text["LOOK_ITEMS"]
+
+                for item in self.items[:-1]:
+                    items_str += "{}, ".format(item.name)
+
+                items_str += "and {}".format(self.items[-1].name)
+            # one item
+            elif len(self.items) == 1:
+                opened_str = self.text["LOOK_ITEMS"]
+                items_str += self.items[0].name
+            # no items
+            else:
+                opened_str = self.text["LOOK_EMPTY"]
+
+            self.echo(opened_str.format(name=self.name, items=items_str))
+
+        # send trigger
+        self.on_look.trigger()
 
     def open(self):
         """
         player opened the container
         """
         if not self._opened:
-            self._opened = True
-            self.echo(self.text["OPEN"].format(name=self.name))
-            # you look inside the container when you open it
-            # don't describe the container again, though
-            self.look(describe_self=False)
-            self.on_open.trigger()
+            if not self._locked:
+                self._opened = True
+                self.echo(self.text["OPEN"].format(name=self.name))
+                # you look inside the container when you open it
+                # don't describe the container again, though
+                self.look(describe_self=False)
+                self.on_open.trigger()
+            else:
+                self.echo(self.text["OPEN_LOCKED"].format(name=self.name))
         else:
             self.echo(self.text["ALREADY_OPEN"].format(name=self.name))
 
@@ -136,41 +194,14 @@ class Container(Item):
         else:
             self.echo(self.text["ALREADY_CLOSED"].format(name=self.name))
 
-    def look(self, describe_self=True, describe_items=True):
+    def unlock(self):
         """
-        override Item.look() to include items inside the container if it is open
+        player unlocks the container
         """
-        # print description
-        if describe_self:
-            if self._opened:
-                self.echo(self.text["LOOK_OPEN"].format(description=self.description))
-            else:
-                self.echo(self.text["LOOK_CLOSED"].format(description=self.description))
-
-        # print items in the container if it is open
-        if describe_items and self._opened:
-            opened_str = ""
-            items_str = ""
-
-            # multiple items in container
-            if len(self.items) > 1:
-                opened_str = self.text["LOOK_ITEMS"]
-
-                for item in self.items[:-1]:
-                    items_str += "{}, ".format(item.name)
-
-                item_str += "and {}".format(self.items[-1].name)
-            # one item
-            elif len(self.items) == 1:
-                opened_str = self.text["LOOK_ITEMS"]
-                items_str += self.items[0].name
-            # no items
-            else:
-                opened_str = self.text["LOOK_EMPTY"]
-
-            self.echo(opened_str.format(name=self.name, items=items_str))
-
-        # send trigger
-        self.on_look.trigger()
+        if self._locked:
+            self._locked = False
+            self.echo(self.text["UNLOCK"].format(name=self.name))
+        else:
+            self.echo(self.text["ALREADY_UNLOCKED"].format(name=self.name))
 
 
