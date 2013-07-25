@@ -71,3 +71,9 @@ class World(AbstractWorld):
     @property
     def player(self):
         return self._player
+
+    def start(self):
+        """
+        start game; have player enter its current location
+        """
+        self._player.location.enter()

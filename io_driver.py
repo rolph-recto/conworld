@@ -15,8 +15,8 @@ class IODriver(object):
 
         # command kernel
         self._kernel = kernel
-        # attach world to kernel
-        self._kernel.world = world
+        # listen to echoes from the kernel
+        self._kernel.on_echo.subscribe(self.kernel_echo)
 
         # list of strings emitted by world
         self._outstream = []
@@ -47,7 +47,7 @@ class IODriver(object):
         """
         flush output stream
         """
-        del self._outstream[:]
+        self._outstream = []
 
     def process(self, input_str):
         """

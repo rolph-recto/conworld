@@ -70,6 +70,16 @@ class AbstractRoom(EchoMixin):
             raise RuntimeError("{item} is not in {room}"
                 .format(item=item.name, room=self.name))
 
+    def get_item(self, item_name):
+        """
+        get item by name
+        """
+        for item in self._items:
+            if item.name == item_name or item_name in item.synonyms:
+                return item
+
+        return None
+
     def object_echo(self, msg):
         """
         relay object echo messages up to the echo listeners of the room

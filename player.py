@@ -30,9 +30,6 @@ class Player(EchoMixin):
 
         # location of player (room that player is currently in)
         self.location = start_location
-        # enter the starting location, naturally
-        if not self.location == None:
-            self.location.enter()
 
         # template strings for printing
         self.text = {}

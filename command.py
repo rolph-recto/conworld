@@ -12,14 +12,13 @@ class Command(EchoMixin):
     """
 
     # words that should be removed from a command string
-    STOPWORDS = ["the", "a", "in"]
+    STOPWORDS = ["the", "a", "in", "at", "to"]
 
-    def __init__(self, pattern, world):
+    def __init__(self, pattern, world=None):
         super(Command, self).__init__()
 
         self._pattern = pattern
-        self._world = world
-
+        self.world = world
 
     @classmethod
     def _preprocess(cls, input):
@@ -30,6 +29,8 @@ class Command(EchoMixin):
 
         # set to lowercase
         result = input.lower()
+        # strip punctuation
+        result = re.sub(r"[`~!@#$%^&*()-=_+,./<>?;':\"\[\]{}\|]", "", result)
         # remove stopwords
         result = " ".join([word for word in result.split()
             if not word in Command.STOPWORDS])
@@ -53,6 +54,7 @@ class Command(EchoMixin):
         # if the command pattern matches, execute the command!
         if not output == None:
             self.execute(**output.groupdict())
+            return True
         else:
             return False
 
@@ -62,3 +64,34 @@ class Command(EchoMixin):
         let subclasses override this
         """
         pass
+
+
+class LookCommand(Command):
+    """
+    look at an item
+    """
+
+    PATTERN = r"look (?P<item_name>[\w\s\d]+)"
+    TEXT = {
+        "NO_ITEM": "You don't see a {item}."
+    }
+
+    def __init__(self, world=None):
+        super(LookCommand, self).__init__(LookCommand.PATTERN, world)
+
+    def execute(self, item_name):
+        # check if the item is in the current room
+        item = self.world.player.location.get_item(item_name)
+
+        if not item == None:
+            if ((not item.owner == None) and item.owner.opened) or \
+            item.owner == None:
+                item.look()
+
+            else:
+                self.echo(LookCommand.TEXT["NO_ITEM"].format(item=item_name))
+
+        else:
+            self.echo(LookCommand.TEXT["NO_ITEM"].format(item=item_name))
+
+
