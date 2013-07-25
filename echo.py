@@ -1,7 +1,7 @@
 # echo.py
 # echo mixin
 
-from event import Event
+from .event import Event
 
 
 class EchoMixin(object):

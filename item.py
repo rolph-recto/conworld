@@ -1,4 +1,5 @@
 # item.py
+# objects that reside in a room
 
 from .event import Event
 from .echo import EchoMixin
@@ -24,7 +25,7 @@ class AbstractItem(EchoMixin):
         super(AbstractItem, self).__init__()
 
         # this must be unique to the room
-        self.name = name
+        self._name = name
         self.description = description
         # other names that the item can be called
         # these must also be unique to the room
@@ -35,6 +36,17 @@ class AbstractItem(EchoMixin):
         self.properties.update(properties)
         # template strings for printing
         self.text = {}
+
+    # name property is read only
+    @property
+    def name(self):
+        return self._name
+
+    def __unicode__(self):
+        return self.name.decode()
+
+    def __str__(self):
+        return self.name
 
 
 class Item(AbstractItem):
@@ -78,7 +90,7 @@ class Item(AbstractItem):
         # subscribe new room
         self._room = new_room
         # only if it's actually a room, though
-        if not room == None:
+        if not new_room == None:
             self.on_echo.subscribe(self._room.object_echo)
 
     def look(self):
@@ -101,8 +113,8 @@ class Container(Item):
         "container": True
     }
     TEXT = {
-        "LOOK_OPEN": "{description} It is open.",
-        "LOOK_CLOSED": "{description} It is closed.",
+        "OPENED": "The {name} is open.",
+        "CLOSED": "The {name} is closed.",
         "LOOK_ITEMS": "The {name} has these items inside it: {items}",
         "LOOK_EMPTY": "The {name} is open but it has nothing inside it.",
         "OPEN": "You open the {name}.",
@@ -155,16 +167,29 @@ class Container(Item):
     def locked(self):
         return self._locked
 
-    @Item.room.setter
-    def room(self, room):
-        """
-        override Item.room()
-        if a container changes rooms, all the items inside it change rooms also
-        """
-        super(Container, self).room(room)
+    # override Item.room property
+    @property
+    def room(self):
+        return self._room
 
+    @room.setter
+    def room(self, new_room):
+        """
+        set the room the item is in
+        """
+        # unsubscribe current room
+        if not self._room == None:
+            self.on_echo.unsubscribe(self._room.object_echo)
+
+        # subscribe new room
+        self._room = new_room
+        # only if it's actually a room, though
+        if not new_room == None:
+            self.on_echo.subscribe(self._room.object_echo)
+
+        # set new room for all items in the container as well
         for item in self._items:
-            item.room = room
+            item.room = new_room
 
     def look(self, describe_self=True, describe_items=True):
         """
@@ -172,12 +197,11 @@ class Container(Item):
         """
         # print description
         if describe_self:
+            self.echo(self.description)
             if self._opened:
-                self.echo(self.text["LOOK_OPEN"]
-                    .format(description=self.description))
+                self.echo(self.text["OPENED"].format(name=self.name))
             else:
-                self.echo(self.text["LOOK_CLOSED"]
-                    .format(description=self.description))
+                self.echo(self.text["CLOSED"].format(name=self.name))
 
         # print items in the container if it is open
         if describe_items and self._opened:
@@ -242,6 +266,8 @@ class Container(Item):
             self._locked = False
             self.echo(self.text["UNLOCK"].format(name=self.name))
             self.on_unlock.trigger()
+            # open the container too
+            self.open()
         else:
             self.echo(self.text["ALREADY_UNLOCKED"].format(name=self.name))
 
@@ -252,11 +278,14 @@ class Container(Item):
         if not item in self._items:
             if item.properties["containable"]:
                 if not self._locked:
-                    item.container = self
-                    self._items.append(item)
-                    self.echo(self.text["ADD"].format(name=self.name,
-                        item=item.name))
-                    self.on_add_item.trigger()
+                    if self._opened:
+                        item.container = self
+                        self._items.append(item)
+                        self.echo(self.text["ADD"].format(name=self.name,
+                            item=item.name))
+                        self.on_add_item.trigger()
+                    else:
+                        self.echo(self.text["CLOSED"].format(name=self.name))
                 else:
                     self.echo(self.text["ADD_LOCKED"].format(name=self.name,
                         item=item.name))
@@ -273,11 +302,14 @@ class Container(Item):
         """
         if item in self._items:
             if not self._locked:
-                item.container = None
-                self._items.remove(item)
-                self.echo(self.text["REMOVE"].format(name=self.name,
-                    item=item.name))
-                self.on_remove_item.trigger()
+                if self._opened:
+                    item.container = None
+                    self._items.remove(item)
+                    self.echo(self.text["REMOVE"].format(name=self.name,
+                        item=item.name))
+                    self.on_remove_item.trigger()
+                else:
+                    self.echo(self.text["CLOSED"].format(name=self.name))
             else:
                 self.echo(self.text["REMOVE_LOCKED"].format(name=self.name,
                     item=item.name))
