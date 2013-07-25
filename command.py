@@ -3,6 +3,7 @@
 
 import re
 
+from . import DIRECTIONS, DIRECTION_SYNONYMS
 from .echo import EchoMixin
 
 
@@ -12,13 +13,24 @@ class Command(EchoMixin):
     """
 
     # words that should be removed from a command string
-    STOPWORDS = ["the", "a", "in", "at", "to"]
+    STOPWORDS = ["the", "a", "in", "at", "to", "room", "around"]
 
-    def __init__(self, pattern, world=None):
+    def __init__(self, name, pattern, world=None):
         super(Command, self).__init__()
 
         self._pattern = pattern
+        self._name = name
         self.world = world
+
+    @property
+    def name(self):
+        return self._name
+
+    def __unicode__(self):
+        return self._name.decode()
+
+    def __str__(self):
+        return self._name
 
     @classmethod
     def _preprocess(cls, input):
@@ -66,7 +78,23 @@ class Command(EchoMixin):
         pass
 
 
-class LookCommand(Command):
+class LookRoomCommand(Command):
+    """
+    look at a room
+    """
+
+    PATTERN = r"^look$"
+
+    def __init__(self, world=None):
+        super(LookRoomCommand, self).__init__("look room",
+            LookRoomCommand.PATTERN, world)
+
+    def execute(self):
+        # look at the player's current location
+        self.world.player.location.look()
+
+
+class LookItemCommand(Command):
     """
     look at an item
     """
@@ -77,7 +105,8 @@ class LookCommand(Command):
     }
 
     def __init__(self, world=None):
-        super(LookCommand, self).__init__(LookCommand.PATTERN, world)
+        super(LookItemCommand, self).__init__("look item",
+            LookItemCommand.PATTERN, world)
 
     def execute(self, item_name):
         # check if the item is in the current room
@@ -89,9 +118,31 @@ class LookCommand(Command):
                 item.look()
 
             else:
-                self.echo(LookCommand.TEXT["NO_ITEM"].format(item=item_name))
+                self.echo(LookItemCommand.TEXT["NO_ITEM"]
+                    .format(item=item_name))
 
         else:
-            self.echo(LookCommand.TEXT["NO_ITEM"].format(item=item_name))
+            self.echo(LookItemCommand.TEXT["NO_ITEM"].format(item=item_name))
 
 
+class MoveCommand(Command):
+    """
+    move to another room
+    """
+
+    PATTERN = r"(move|go) (?P<direction>[\w]+)"
+    TEXT = {
+        "NO_DIRECTION": "{direction} is not a direction."
+    }
+
+    def __init__(self, world=None):
+        super(MoveCommand, self).__init__("move", MoveCommand.PATTERN, world)
+
+    def execute(self, direction):
+        if direction in DIRECTIONS:
+            self.world.player.move(direction)
+        elif direction in DIRECTION_SYNONYMS:
+            self.world.player.move(DIRECTION_SYNONYMS[direction])
+        else:
+            self.echo(MoveCommand.TEXT["NO_DIRECTION"].format(
+                direction=direction))

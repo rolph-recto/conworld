@@ -31,6 +31,13 @@ class IODriver(object):
     def kernel(self):
         return self._kernel
 
+    @property
+    def output(self):
+        output = self._outstream[:]
+        # flush output after it has been accessed
+        self.flush_output()
+        return output
+
     def world_echo(self, msg):
         """
         capture messages from world into output stream
