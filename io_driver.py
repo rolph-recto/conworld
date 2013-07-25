@@ -37,6 +37,18 @@ class IODriver(object):
         """
         self._outstream.append(msg)
 
+    def kernel_echo(self, msg):
+        """
+        capture messages from command kernel
+        """
+        self._outstream.append(msg)
+
+    def flush_output(self):
+        """
+        flush output stream
+        """
+        del self._outstream[:]
+
     def process(self, input_str):
         """
         feed input into world and return output
@@ -46,12 +58,6 @@ class IODriver(object):
         self.flush_output()
 
         return output
-
-    def flush_output(self):
-        """
-        flush output stream
-        """
-        del self._outstream[:]
 
 
 
