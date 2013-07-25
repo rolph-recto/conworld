@@ -14,15 +14,9 @@ class CommandKernel(EchoMixin):
 
     def __init__(self, world, commands=[]):
         super(CommandKernel, self).__init__()
-        
-        self._world = world
+
         self._commands = []
         self.add_commands(commands)
-
-    # world property is read only
-    @property
-    def world(self):
-        return self._world
 
     def add_command(self, command):
         """
@@ -36,7 +30,6 @@ class CommandKernel(EchoMixin):
         """
         for command in commands:
             if not command in self._commands:
-                command.world = self._world
                 command.on_echo.subscribe(self.command_echo)
                 self._commands.append(command)
             else:
@@ -48,13 +41,13 @@ class CommandKernel(EchoMixin):
         """
         self.echo(msg)
 
-    def input(self, input):
+    def input(self, world, input):
         """
         feed the input to the list of commands
         """
         for command in self._commands:
             # once we have a match, stop
-            if command.match(input):
+            if command.match(world, input):
                 return
 
         # if we reach here, that means the input matched no command

@@ -60,7 +60,7 @@ class IODriver(object):
         """
         feed input into world and return output
         """
-        self._kernel.input(input_str)
+        self._kernel.input(self._world, input_str)
         output = self._outstream[:]
         self.flush_output()
 
