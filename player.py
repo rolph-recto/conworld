@@ -12,6 +12,8 @@ class Player(EchoMixin):
 
     TEXT = {
         "TAKE": "You take the {item} and put it in your inventory.",
+        "TAKE_IN_LOCKED_CONTAINER": ("The {item} is locked inside "
+            "the {container}."),
         "TAKE_NOT_INVENTORY": "You can't take the {item}.",
         "ALREADY_TAKEN": "The {item} is already in your inventory.",
         "DISCARD": "You discard the {item} and leave it in the {room}.",
@@ -48,13 +50,25 @@ class Player(EchoMixin):
         """
         add an item to the inventory
         """
-        if not item.properties["inventory"]:
+        if not item.inventory:
             self.echo(self.text["TAKE_NOT_INVENTORY"].format(item=item.name))
             return
+
+        if not item.owner == None and item.owner.locked:
+            self.echo(self.text["TAKE_IN_LOCKED_CONTAINER"].format(
+                item=item.name, container=item.owner.name))
 
         if item in self._inventory:
             self.echo(self.text["ALREADY_TAKEN"].format(item=item.name))
             return
+
+        # if the item is in the container, open the container and
+        # take the item out of it
+        if not item.owner == None:
+            if not item.owner.opened:
+                item.owner.open()
+
+            item.owner.remove(item)
 
         # the item is "roomless" when it is in the inventory
         item.room.remove_item(item)

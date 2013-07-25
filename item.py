@@ -9,19 +9,9 @@ class AbstractItem(EchoMixin):
     """
     base class for item
     doesn't contain any properties or event hooks
-
-    CRITERIA FOR PROPERTIES
-    -intrinsic to the item; they are NOT relative to player
-        -ex., a room does not have the property "entered" because
-        it is relative to the player
-    -immutable; cannot change within the course of the game
-        -ex., a container does not have the property "opened" (it is a state)
-
-    If it's not a property, it's an object attribute, so declare it as such
-    in the constructor
     """
 
-    def __init__(self, name, synonyms=(), description="", properties={}):
+    def __init__(self, name, synonyms=(), description=""):
         super(AbstractItem, self).__init__()
 
         # this must be unique to the room
@@ -30,10 +20,6 @@ class AbstractItem(EchoMixin):
         # other names that the item can be called
         # these must also be unique to the room
         self.synonyms = synonyms
-        # set of ontological properties of the item
-        # ex. liquid, breakable, holdable, takeable, etc.
-        self.properties = {}
-        self.properties.update(properties)
         # template strings for printing
         self.text = {}
 
@@ -52,29 +38,44 @@ class AbstractItem(EchoMixin):
 class Item(AbstractItem):
     """
     objects that reside within the world
+
+
+    CRITERIA FOR PROPERTIES
+    -intrinsic to the item; they are NOT relative to player
+        -ex., a room does not have the property "entered" because
+        it is relative to the player
+    -immutable; cannot change within the course of the game
+        -ex., a container does not have the property "opened" (it is a state)
     """
 
-    DEFAULT_PROPERTIES = {
-        # item can be kept in player's inventory
-        "inventory": False,
-        # item can be picked up and be put in a container
-        "containable": True,
-        # item is a container
-        "container": False,
-    }
+    def __init__(self, name, synonyms=(), description="", items=[], inventory=False,
+        containable=True, container=False):
+        super(Item, self).__init__(name, synonyms, description)
 
-    def __init__(self, name, synonyms=(), description="", pty={}):
-        super(Item, self).__init__(name, synonyms, description,
-            self.__class__.DEFAULT_PROPERTIES)
-        print name, pty
-        self.properties.update(pty)
-        self.container = None # the container the item is in
+        #properties
+        self._inventory = inventory
+        self._containable = containable
+        self._container = container
+
+        self.owner = None # the container the item is in
         self._room = None
         self._player = None # the player whose inventory the item is in
 
         # EVENTS
         # player looked at this item
         self.on_look = Event()
+
+    @property
+    def inventory(self):
+        return self._inventory
+
+    @property
+    def containable(self):
+        return self._containable
+
+    @property
+    def container(self):
+        return self._container
 
     @property
     def room(self):
@@ -128,23 +129,20 @@ class Container(Item):
     items that contain other items
     """
 
-    DEFAULT_PROPERTIES = {
-        "inventory": False,
-        "containable": False,
-        "container": True
-    }
     TEXT = {
         "OPENED": "The {name} is open.",
         "CLOSED": "The {name} is closed.",
         "LOOK_ITEMS": "The {name} has these items inside it: {items}",
         "LOOK_EMPTY": "The {name} is open but it has nothing inside it.",
-        "OPEN": "You open the {name}.",
+        "OPEN": "The {name} is now opened.",
         "ALREADY_OPEN": "The {name} is already open.",
         "OPEN_LOCKED": "The {name} is locked.",
-        "CLOSE": "You close the {name}.",
+        "CLOSE": "The {name} is now closed.",
         "ALREADY_CLOSED": "The {name} is already closed.",
-        "UNLOCK": "You unlock the {name}.",
+        "UNLOCK": "The {name} is now unlocked.",
         "ALREADY_UNLOCKED": "The {name} is already unlocked.",
+        "LOCK": "The {name} is now locked.",
+        "ALREADY_LOCKED": "The {name} is already locked.",
         "ADD": "You put the {item} in the {name}.",
         "ADD_LOCKED": ("You can't put the {item} in the {name} "
             "because it is locked."),
@@ -157,13 +155,18 @@ class Container(Item):
         "ALREADY_REMOVED": "The {item} is not in the {name}."
     }
 
-    def __init__(self, name, synonyms=(), description="", properties={},
-        opened=False, locked=False):
-        super(Container, self).__init__(name, synonyms, description, properties)
+    def __init__(self, name, synonyms=(), description="", items=[], opened=False,
+        locked=False, inventory=False, containable=False):
+
+        # containers can't be containable themselves (for now)
+        # maybe add Russian doll-style recursive containers later?
+        super(Container, self).__init__(name, synonyms, description,
+            inventory, containable=False, container=True)
 
         # template strings for printing
         self.text.update(Container.TEXT)
         self._items = []
+        self.insert_items(items)
         self._locked = locked
         self._opened = False if locked else opened
 
@@ -172,11 +175,13 @@ class Container(Item):
         self.on_open = Event()
         # player closed this container
         self.on_close = Event()
-        # player unlocked the container
+        # container was unlocked
         self.on_unlock = Event()
-        # player added an item to the container
+        # container was locked
+        self.on_lock = Event()
+        # item added to container
         self.on_add_item = Event()
-        # player remove an item from the container
+        # item removed from container
         self.on_remove_item = Event()
 
     # opened is read-only
@@ -184,7 +189,6 @@ class Container(Item):
     def opened(self):
         return self._opened
 
-    # locked is read-only
     @property
     def locked(self):
         return self._locked
@@ -282,7 +286,7 @@ class Container(Item):
 
     def unlock(self):
         """
-        player unlocks the container
+        unlock the container
         """
         if self._locked:
             self._locked = False
@@ -293,13 +297,28 @@ class Container(Item):
         else:
             self.echo(self.text["ALREADY_UNLOCKED"].format(name=self.name))
 
+    def lock(self):
+        """
+        lock container
+        """
+        if not self._locked:
+            # close the container before locking it
+            if self._opened:
+                self.close()
+
+            self._locked = True
+            self.echo(self.text["LOCK"].format(name=self.name))
+            self.on_lock.trigger()
+        else:
+            self.echo(self.text["ALREADY_LOCKED"].format(name=self.name))
+
     def add(self, item):
         """
         add item to container
         """
-        if not item.container == None:
+        if not item.owner == None:
             self.echo(self.text["ADD_CONTAINED"].format(item=item.name,
-                container=item.container.name))
+                container=item.owner.name))
             return
 
         if item in self._items:
@@ -307,7 +326,7 @@ class Container(Item):
                 item=item.name))
             return
 
-        if not item.properties["containable"]:
+        if not item._containable:
             self.echo(self.text["ADD_NOT_CONTAINABLE"].format(name=self.name,
                 item=item.name))
             return
@@ -321,12 +340,29 @@ class Container(Item):
             self.echo(self.text["CLOSED"].format(name=self.name))
             return
 
-
-        item.container = self
+        item.owner = self
         self._items.append(item)
         self.echo(self.text["ADD"].format(name=self.name,
             item=item.name))
         self.on_add_item.trigger()
+
+    def insert_item(self, item):
+        """
+        insert a single item to container
+        """
+        if not item in self._items:
+            item.owner = self
+            self._items.append(item)
+
+    def insert_items(self, items):
+        """
+        this is used internally to manually add items to the container
+        this is NOT called by the player; it does not print messages
+        """
+        for item in items:
+            if not item in self._items:
+                item.owner = self
+                self._items.append(item)
 
     def remove(self, item):
         """
@@ -346,10 +382,18 @@ class Container(Item):
             self.echo(self.text["CLOSED"].format(name=self.name))
             return
 
-        item.container = None
+        item.owner = None
         self._items.remove(item)
         self.echo(self.text["REMOVE"].format(name=self.name, item=item.name))
         self.on_remove_item.trigger()
+
+    def erase_item(self, item):
+        """
+        like the remove() counterpart of insert()
+        """
+        if item in self._items:
+            item.owner = None
+            self._items.remove(item)
 
     def get(self, item_name):
         """
