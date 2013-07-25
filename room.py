@@ -1,7 +1,7 @@
 # room.py
 # a space with a collection of items
 
-from . import DIRECTIONS
+from . import DIRECTIONS, enumerate_items
 from .event import Event
 from .echo import EchoMixin
 from .item import Item
@@ -176,27 +176,18 @@ class Room(AbstractRoom):
 
         # describe items
         look_str = ""
-        items_str = ""
         # can't see items in closed containers
         visible_items = [item for item in self._items
             if item.owner == None or item.owner.opened]
 
         # multiple items in container
-        if len(visible_items) > 1:
+        if len(visible_items) >= 1:
             look_str = self.text["LOOK_ITEMS"]
-
-            for item in visible_items[:-2]:
-                items_str += "{}, ".format(item.name)
-
-            items_str += "{} ".format(visible_items[-2].name)
-            items_str += "and {}".format(visible_items[-1].name)
-        # one item
-        elif len(visible_items) == 1:
-            look_str = self.text["LOOK_ITEMS"]
-            items_str += visible_items[0].name
         # no items
         else:
             look_str = self.text["LOOK_EMPTY"]
+
+        items_str = enumerate_items([item.name for item in visible_items])
 
         self.echo(look_str.format(room=self.name, items=items_str))
 

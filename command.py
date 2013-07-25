@@ -3,7 +3,7 @@
 
 import re
 
-from . import DIRECTIONS, DIRECTION_SYNONYMS
+from . import DIRECTIONS, DIRECTION_SYNONYMS, enumerate_items
 from .echo import EchoMixin
 
 
@@ -82,7 +82,7 @@ class LookRoomCommand(Command):
     look at a room
     """
 
-    PATTERN = r"^look$"
+    PATTERN = r"^(look|view)$"
 
     def __init__(self):
         super(LookRoomCommand, self).__init__("look room",
@@ -98,7 +98,7 @@ class LookItemCommand(Command):
     look at an item
     """
 
-    PATTERN = r"look (?P<item_name>[\w\s\d]+)"
+    PATTERN = r"(look|view) (?P<item_name>[\w\s\d]+)"
     TEXT = {
         "NO_ITEM": "You don't see a {item}."
     }
@@ -110,6 +110,9 @@ class LookItemCommand(Command):
     def execute(self, world, item_name):
         # check if the item is in the current room
         item = world.player.location.get_item(item_name)
+        # try to look for the item in the player's inventory
+        if item == None:
+            item = world.player.get_item(item_name)
 
         if not item == None:
             if ((not item.owner == None) and item.owner.opened) or \
@@ -119,7 +122,6 @@ class LookItemCommand(Command):
             else:
                 self.echo(LookItemCommand.TEXT["NO_ITEM"]
                     .format(item=item_name))
-
         else:
             self.echo(LookItemCommand.TEXT["NO_ITEM"].format(item=item_name))
 
@@ -192,3 +194,29 @@ class DiscardCommand(Command):
             world.player.discard(item)
         else:
             self.echo(DiscardCommand.TEXT["NO_ITEM"].format(item=item_name))
+
+
+class InventoryCommand(Command):
+    """
+    view the player inventory
+    """
+
+    PATTERN = r"^inventory$"
+    TEXT = {
+        "INVENTORY": "You have the following items in your inventory: {items}",
+        "NO_ITEMS": "You have no items in your inventory."
+    }
+
+    def __init__(self):
+        super(InventoryCommand, self).__init__("inventory",
+            InventoryCommand.PATTERN)
+
+    def execute(self, world):
+        # get player inventory
+        items = [item.name for item in world.player.inventory]
+
+        if len(items) >= 1:
+            self.echo(InventoryCommand.TEXT["INVENTORY"].format(
+                items=enumerate_items(items)))
+        else:
+            self.echo(InventoryCommand.TEXT["NO_ITEMS"])

@@ -1,4 +1,5 @@
 # command_kernel.py
+# manage user input and commands
 
 from .echo import EchoMixin
 
@@ -12,11 +13,15 @@ class CommandKernel(EchoMixin):
         "NO_COMMAND": "I don't understand what you mean."
     }
 
-    def __init__(self, world, commands=[]):
+    def __init__(self, commands=[]):
         super(CommandKernel, self).__init__()
 
         self._commands = []
         self.add_commands(commands)
+
+    @property
+    def commands(self):
+        return self._commands
 
     def add_command(self, command):
         """

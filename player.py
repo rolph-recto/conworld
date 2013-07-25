@@ -43,6 +43,10 @@ class Player(EchoMixin):
         # player moves to another room
         self.on_move = Event()
 
+    @property
+    def inventory(self):
+        return self._inventory
+
     def take(self, item):
         """
         add an item to the inventory
@@ -131,6 +135,4 @@ class Player(EchoMixin):
         relay inventory item messages to player echo callbacks
         """
         self.echo(msg)
-
-
 
