@@ -177,19 +177,23 @@ class Room(AbstractRoom):
         # describe items
         look_str = ""
         items_str = ""
+        # can't see items in closed containers
+        visible_items = [item for item in self._items
+            if item.owner == None or item.owner.opened]
+
         # multiple items in container
-        if len(self._items) > 1:
+        if len(visible_items) > 1:
             look_str = self.text["LOOK_ITEMS"]
 
-            for item in self._items[:-2]:
+            for item in visible_items[:-2]:
                 items_str += "{}, ".format(item.name)
 
-            items_str += "{} ".format(self._items[-2].name)
-            items_str += "and {}".format(self._items[-1].name)
+            items_str += "{} ".format(visible_items[-2].name)
+            items_str += "and {}".format(visible_items[-1].name)
         # one item
-        elif len(self._items) == 1:
+        elif len(visible_items) == 1:
             look_str = self.text["LOOK_ITEMS"]
-            items_str += self._items[0].name
+            items_str += visible_items[0].name
         # no items
         else:
             look_str = self.text["LOOK_EMPTY"]

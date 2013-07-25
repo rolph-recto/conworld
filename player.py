@@ -54,6 +54,7 @@ class Player(EchoMixin):
         if not item.owner == None and item.owner.locked:
             self.echo(self.text["TAKE_IN_LOCKED_CONTAINER"].format(
                 item=item.name, container=item.owner.name))
+            return
 
         if item in self._inventory:
             self.echo(self.text["ALREADY_TAKEN"].format(item=item.name))
@@ -94,7 +95,7 @@ class Player(EchoMixin):
         get item from inventory by its name
         """
         for item in self._inventory:
-            if item.name == item_name:
+            if item.name == item_name or item_name in item.synonyms:
                 return item
 
         return None

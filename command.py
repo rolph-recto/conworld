@@ -176,7 +176,7 @@ class DiscardCommand(Command):
     discard an item from the inventory
     """
 
-    PATTERN = r"(discard|throw|throw away) (?P<item_name>[\w\s\d]+)"
+    PATTERN = r"(discard|throw away|throw) (?P<item_name>[\w\s\d]+)"
     TEXT = {
         "NO_ITEM": "There is no {item} in your inventory."
     }
