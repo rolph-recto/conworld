@@ -10,6 +10,8 @@ class AbstractWorld(EchoMixin):
     """
 
     def __init__(self, rooms=[]):
+        super(AbstractWorld, self).__init__()
+        
         self._rooms = []
         self.add_rooms(rooms)
 
@@ -44,7 +46,13 @@ class AbstractWorld(EchoMixin):
 
     def room_echo(self, msg):
         """
-        relay room messages to world echo callbacks (ex., IO driver)
+        relay room messages to world echo callbacks (ex. IO driver)
+        """
+        self.echo(msg)
+
+    def player_echo(self, msg):
+        """
+        relay messages from player to world echo callbacks (ex. IO driver)
         """
         self.echo(msg)
 
@@ -53,3 +61,13 @@ class World(AbstractWorld):
     """
     collection of rooms
     """
+
+    def __init__(self, player, rooms=[]):
+        super(World, self).__init__(rooms)
+        self._player = player
+        self._player.on_echo.subscribe(self.player_echo)
+
+    # player property is read-only
+    @property
+    def player(self):
+        return self._player

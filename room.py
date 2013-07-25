@@ -12,9 +12,9 @@ class Path(object):
     path from one room to another
     """
 
-    def __init__(self, destination, locked=False):
+    def __init__(self, destination, blocked=False):
         self.destination = destination
-        self.locked = locked
+        self.blocked = blocked
 
 
 class AbstractRoom(EchoMixin):
@@ -84,12 +84,24 @@ class Room(AbstractRoom):
     can contain items and paths to other rooms
     """
 
-    def __init__(self, name, items=[], world=None):
-        super(Room, self).__init__(name, items)
+    TEXT = {
+        "ENTER": "You enter the {room}.",
+        "LOOK_PATH": "Looking {direction}wards, you see the {destination}. ",
+        "LOOK_PATH_BLOCK": ("Looking {direction}wards, you see the "
+            "{destination}, but the path is blocked."),
+        "LOOK_ITEMS": ("Looking around the {room}, you see the "
+            "following items: {items}"),
+        "LOOK_EMPTY": "Looking around the {room}, you don't see any items.",
+    }
+
+    def __init__(self, name, description="", items=[], world=None):
+        super(Room, self).__init__(name, description, items)
         # paths to other rooms
-        self._path = dict[(direction, None) for direction in DIRECTIONS]
+        self._paths = dict([(direction, None) for direction in DIRECTIONS])
         self._world = None
         self.world = world
+        self.text = {}
+        self.text.update(Room.TEXT)
 
         # EVENTS
         # player entered room
@@ -97,7 +109,7 @@ class Room(AbstractRoom):
         # player exited room
         self.on_exit = Event()
         # player looks around room
-        self.on_look() = Event()
+        self.on_look = Event()
 
     @property
     def world(self):
@@ -122,7 +134,9 @@ class Room(AbstractRoom):
         """
         player has entered the room
         """
-        self.echo(self.description)
+        # player looks around when he/she enters
+        self.echo(self.text["ENTER"].format(room=self.name))
+        self.look()
         self.on_enter.trigger()
 
     def exit(self):
@@ -130,5 +144,88 @@ class Room(AbstractRoom):
         player has left the room
         """
         self.on_exit.trigger()
+
+    def look(self):
+        """
+        player looks around the room
+        """
+        self.echo(self.description)
+
+        # describe paths
+        look_path = ""
+        for direction, path in self._paths.iteritems():
+            if not path == None:
+                if not path.blocked:
+                    look_path += self.text["LOOK_PATH"].format(
+                        direction=direction, destination=path.destination)
+                else:
+                    look_path += self.text["LOOK_PATH_BLOCKED"].format(
+                        direction=direction, destination=path.destination)
+
+        self.echo(look_path)
+
+        # describe items
+        look_str = ""
+        items_str = ""
+        # multiple items in container
+        if len(self._items) > 1:
+            look_str = self.text["LOOK_ITEMS"]
+
+            for item in self._items[:-2]:
+                items_str += "{}, ".format(item.name)
+
+            items_str += "{} ".format(self._items[-2].name)
+            items_str += "and {}".format(self._items[-1].name)
+        # one item
+        elif len(self._items) == 1:
+            look_str = self.text["LOOK_ITEMS"]
+            items_str += self._items[0].name
+        # no items
+        else:
+            look_str = self.text["LOOK_EMPTY"]
+
+        self.echo(look_str.format(room=self.name, items=items_str))
+
+        self.on_look.trigger()
+
+    def add_path(self, direction, destination, blocked=False):
+        """
+        add a path to another room
+        """
+        if direction in DIRECTIONS:
+            path = Path(destination, blocked)
+            self._paths[direction] = path
+        else:
+            raise ValueError("{} is not a direction".format(direction))
+
+    def remove_path(self, dir_dest):
+        """
+        remove a path by direction or by destination
+        """
+        # by direction
+        if type(dir_dest) == str:
+            if dir_dest in DIRECTION:
+                self._paths[dir_dest] = None
+            else:
+                raise ValueError("{} is not a direction".format(dir_dest))
+
+        # by destination
+        elif type(dir_dest) == Room:
+            rm_dir = ""
+            for direction, destination in self._paths.iteritems():
+                if dir_dest == destination:
+                    rm_dir = direction
+                    break
+
+            # we found the destination; remove its path
+            if not rm_dir == "":
+                self._paths[rm_dir] = None
+
+    def get_path(self, direction):
+        if direction in DIRECTIONS:
+            return self._paths[direction]
+        else:
+            raise ValueError("{} is not a direction".format(dir_dest))
+
 
 

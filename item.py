@@ -63,12 +63,14 @@ class Item(AbstractItem):
         "container": False,
     }
 
-    def __init__(self, name, synonyms=(), description="", properties={}):
+    def __init__(self, name, synonyms=(), description="", pty={}):
         super(Item, self).__init__(name, synonyms, description,
             self.__class__.DEFAULT_PROPERTIES)
-        self.properties.update(properties)
+        print name, pty
+        self.properties.update(pty)
         self.container = None # the container the item is in
         self._room = None
+        self._player = None # the player whose inventory the item is in
 
         # EVENTS
         # player looked at this item
@@ -92,6 +94,25 @@ class Item(AbstractItem):
         # only if it's actually a room, though
         if not new_room == None:
             self.on_echo.subscribe(self._room.object_echo)
+
+    @property
+    def player(self):
+        return self._player
+
+    @room.setter
+    def player(self, new_player):
+        """
+        set player who possesses the item
+        """
+        # unsubscribe current player
+        if not self._player == None:
+            self.on_echo.unsubscribe(self._player.object_echo)
+
+        # subscribe new player
+        self._player = new_player
+        # only if it's actually a player, though
+        if not new_player == None:
+            self.on_echo.subscribe(self._player.object_echo)
 
     def look(self):
         """
@@ -127,6 +148,7 @@ class Container(Item):
         "ADD": "You put the {item} in the {name}.",
         "ADD_LOCKED": ("You can't put the {item} in the {name} "
             "because it is locked."),
+        "ADD_CONTAINED": "The {item} is already in the {container}.",
         "ADD_NOT_CONTAINABLE": "The {item} can't be put in the {name}.",
         "ALREADY_ADDED": "The {item} is already in the {name}.",
         "REMOVE": "You remove the {item} from the {name}.",
@@ -275,47 +297,59 @@ class Container(Item):
         """
         add item to container
         """
-        if not item in self._items:
-            if item.properties["containable"]:
-                if not self._locked:
-                    if self._opened:
-                        item.container = self
-                        self._items.append(item)
-                        self.echo(self.text["ADD"].format(name=self.name,
-                            item=item.name))
-                        self.on_add_item.trigger()
-                    else:
-                        self.echo(self.text["CLOSED"].format(name=self.name))
-                else:
-                    self.echo(self.text["ADD_LOCKED"].format(name=self.name,
-                        item=item.name))
-            else:
-                self.echo(self.text["ADD_NOT_CONTAINABLE"]
-                    .format(name=self.name, item=item.name))
-        else:
+        if not item.container == None:
+            self.echo(self.text["ADD_CONTAINED"].format(item=item.name,
+                container=item.container.name))
+            return
+
+        if item in self._items:
             self.echo(self.text["ALREADY_ADDED"].format(name=self.name,
                 item=item.name))
+            return
+
+        if not item.properties["containable"]:
+            self.echo(self.text["ADD_NOT_CONTAINABLE"].format(name=self.name,
+                item=item.name))
+            return
+
+        if self._locked:
+            self.echo(self.text["ADD_LOCKED"].format(name=self.name,
+                item=item.name))
+            return
+        
+        if not self._opened:
+            self.echo(self.text["CLOSED"].format(name=self.name))
+            return
+
+
+        item.container = self
+        self._items.append(item)
+        self.echo(self.text["ADD"].format(name=self.name,
+            item=item.name))
+        self.on_add_item.trigger()
 
     def remove(self, item):
         """
         remove item from container
         """
-        if item in self._items:
-            if not self._locked:
-                if self._opened:
-                    item.container = None
-                    self._items.remove(item)
-                    self.echo(self.text["REMOVE"].format(name=self.name,
-                        item=item.name))
-                    self.on_remove_item.trigger()
-                else:
-                    self.echo(self.text["CLOSED"].format(name=self.name))
-            else:
-                self.echo(self.text["REMOVE_LOCKED"].format(name=self.name,
-                    item=item.name))
-        else:
+        if not item in self._items:
             self.echo(self.text["ALREADY_REMOVED"].format(name=self.name,
                 item=item.name))
+            return
+
+        if self._locked:
+            self.echo(self.text["REMOVE_LOCKED"].format(name=self.name,
+                item=item.name))
+            return
+
+        if not self._opened:
+            self.echo(self.text["CLOSED"].format(name=self.name))
+            return
+
+        item.container = None
+        self._items.remove(item)
+        self.echo(self.text["REMOVE"].format(name=self.name, item=item.name))
+        self.on_remove_item.trigger()
 
     def get(self, item_name):
         """
