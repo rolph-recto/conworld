@@ -22,6 +22,11 @@ class AbstractItem(EchoMixin):
         self.synonyms = synonyms
         # template strings for printing
         self.text = {}
+        # set of custom actions that the player can do to the item
+        # the key in the action dict is the keyword of the action
+        # and the value is a tuple containing the method to call (val[0])
+        # and its arguments (val[1])
+        self._actions = {}
 
     # name property is read only
     @property
@@ -33,6 +38,34 @@ class AbstractItem(EchoMixin):
 
     def __str__(self):
         return self.name
+
+    def add_action(self, action_name, action_method, action_args={}):
+        """
+        add/replace a custom action to the item
+        """
+        if hasattr(action_method, "__call__"):
+            self._actions[action_name] = (action_method, action_args)
+        else:
+            raise TypeError("Action method is not callable")
+
+    def remove_action(self, action_name):
+        """
+        remove a custom action
+        """
+        if action_name in self._actions:
+            self._actions.pop(action_name, None)
+        else:
+            raise ValueError("{action} is not an action of this item".format(
+                action=action_name))
+
+    def get_action(self, action_name):
+        """
+        retrieve an action by its name
+        """
+        if action_name in self._actions:
+            return self._actions[action_name]
+        else:
+            return None
 
 
 class Item(AbstractItem):
@@ -48,8 +81,13 @@ class Item(AbstractItem):
         -ex., a container does not have the property "opened" (it is a state)
     """
 
-    def __init__(self, name, synonyms=(), description="", items=[], inventory=False,
+    TEXT = {
+        "USE": "You use the {item}."
+    }
+
+    def __init__(self, name, synonyms=(), description="", inventory=False,
         containable=True, container=False):
+
         super(Item, self).__init__(name, synonyms, description)
 
         #properties
@@ -63,7 +101,15 @@ class Item(AbstractItem):
 
         # EVENTS
         # player looked at this item
+        self.add_action("look", self.look)
         self.on_look = Event()
+        # this is a dummy action; have subclasses override it
+        # or have callbacks to it
+        self.add_action("use", self.use)
+        self.on_use = Event()
+
+        # update printing templates
+        self.text.update(Item.TEXT)
 
     @property
     def inventory(self):
@@ -134,6 +180,13 @@ class Item(AbstractItem):
         self.echo(self.description)
         self.on_look.trigger()
 
+    def use(self):
+        """
+        use the item
+        """
+        self.echo(self.text["USE"].format(item=self.name))
+        self.on_use.trigger()
+
 
 class Container(Item):
     """
@@ -174,8 +227,6 @@ class Container(Item):
         super(Container, self).__init__(name, synonyms, description,
             inventory=inventory, containable=False, container=True)
 
-        # template strings for printing
-        self.text.update(Container.TEXT)
         self._items = []
         self._insert(items)
         self._locked = locked
@@ -183,9 +234,13 @@ class Container(Item):
 
         # EVENTS
         # player opened this container
+        self.add_action("open", self.open)
         self.on_open = Event()
         # player closed this container
+        self.add_action("close", self.close)
         self.on_close = Event()
+        # lock/unlock events are not actions because we don't want the player
+        # to be able to manually lock/unlock containers
         # container was unlocked
         self.on_unlock = Event()
         # container was locked
@@ -194,6 +249,9 @@ class Container(Item):
         self.on_add_item = Event()
         # item removed from container
         self.on_remove_item = Event()
+
+        # template strings for printing
+        self.text.update(Container.TEXT)
 
     @property
     def items(self):
@@ -444,3 +502,57 @@ class Container(Item):
 
         return None
 
+
+class Key(Item):
+    """
+    item that unlocks a container
+    """
+
+    TEXT = {
+        "NO_CONTAINER_TO_OPEN": "{item} doesn't unlock anything.",
+        "CONTAINER_NOT_IN_ROOM": "{item} doesn't open anything in the {room}."
+    }
+
+    def __init__(self, name, synonyms=(), description="",
+        container_to_open=None, inventory=True, containable=True,
+        container=False):
+
+        super(Key, self).__init__(name, synonyms, description,
+            inventory=inventory, containable=containable, container=container)
+
+        self._container_to_open = None
+        self.container_to_open = container_to_open
+
+        # update text templates
+        self.text.update(Container.TEXT)
+
+    @property
+    def container_to_open(self):
+        return self._container_to_open
+
+    @container_to_open.setter
+    def container_to_open(self, container):
+        if container == None or isinstance(container, Container):
+            self._container_to_open = container
+        else:
+            raise TypeError("Tried to set non-container as item to open")
+
+    def use(self):
+        if self._container_to_open == None:
+            self.echo(self.TEXT["NO_CONTAINER_TO_OPEN"].format(item=self.name))
+
+        # key must be in the same room or in player's inventory to be used
+        elif not self.room == self._container_to_open.room == None and \
+            not self.player.location == self._container_to_open.room:
+
+            if not self.room == None:
+                item_room = self.room.name
+            else:
+                item_room = self.player.location.name
+
+            self.echo(self.TEXT["CONTAINER_NOT_IN_ROOM"].format(item=self.name,
+                room=item_room))
+
+        else:
+            self._container_to_open.unlock()
+            self.on_use.trigger()

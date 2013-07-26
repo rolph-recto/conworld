@@ -89,39 +89,6 @@ class LookRoomCommand(Command):
         world.player.location.look()
 
 
-class LookItemCommand(Command):
-    """
-    look at an item
-    """
-
-    PATTERN = r"^(look|view) (?P<item_name>[\w\s\d]+)"
-    TEXT = {
-        "NO_ITEM": "You don't see a {item}."
-    }
-
-    def __init__(self):
-        super(LookItemCommand, self).__init__("look item",
-            LookItemCommand.PATTERN)
-
-    def execute(self, world, item_name):
-        # check if the item is in the current room
-        item = world.player.location.get(item_name)
-        # try to look for the item in the player's inventory
-        if item == None:
-            item = world.player.get(item_name)
-
-        if not item == None:
-            if ((not item.owner == None) and item.owner.opened) or \
-            item.owner == None:
-                item.look()
-
-            else:
-                self.echo(LookItemCommand.TEXT["NO_ITEM"]
-                    .format(item=item_name))
-        else:
-            self.echo(LookItemCommand.TEXT["NO_ITEM"].format(item=item_name))
-
-
 class MoveCommand(Command):
     """
     move to another room
@@ -284,70 +251,6 @@ class RemoveCommand(Command):
             item.owner.remove(item)
 
 
-class OpenCommand(Command):
-    """
-    open a container
-    """
-
-    PATTERN = r"^open (?P<container_name>[\w\d\s]+)"
-    TEXT = {
-        "NO_CONTAINER": ("There is no {container} in the {room}"
-            " or in your inventory."),
-        "NOT_CONTAINER": "{container} is not a container."
-    }
-
-    def __init__(self):
-        super(OpenCommand, self).__init__("open", OpenCommand.PATTERN)
-
-    def execute(self, world, container_name):
-        # find container in room or in player's inventory
-        container = world.player.location.get(container_name)
-        if container == None:
-            container = world.player.get(container_name)
-
-        if container == None:
-            self.echo(OpenCommand.TEXT["NO_CONTAINER"].format(
-                container=container_name, room=world.player.location.name))
-        elif not container.container:
-            self.echo(OpenCommand.TEXT["NOT_CONTAINER"].format(
-                container=container_name))
-        else:
-            container.open()
-
-
-class CloseCommand(Command):
-    """
-    close a container
-    """
-
-    PATTERN = r"^close (?P<container_name>[\w\d\s]+)"
-    TEXT = {
-        "NO_CONTAINER": ("There is no {container} in the {room}"
-            " or in your inventory."),
-        "NOT_CONTAINER": "{container} is not a container."
-    }
-
-    def __init__(self):
-        super(CloseCommand, self).__init__("Close", CloseCommand.PATTERN)
-
-    def execute(self, world, container_name):
-        # find container in room or in player's inventory
-        container = world.player.location.get(container_name)
-        if container == None:
-            container = world.player.get(container_name)
-
-        if container == None:
-            self.echo(CloseCommand.TEXT["NO_CONTAINER"].format(
-                container=container_name, room=world.player.location.name))
-
-        elif not container.container:
-            self.echo(CloseCommand.TEXT["NOT_CONTAINER"].format(
-                container=container_name))
-            
-        else:
-            container.close()
-
-
 class InventoryCommand(Command):
     """
     view the player inventory
@@ -374,3 +277,46 @@ class InventoryCommand(Command):
                 items=enumerate_items(items)))
         else:
             self.echo(InventoryCommand.TEXT["NO_ITEMS"])
+
+
+class ActionCommand(Command):
+    """
+    general command for interacting with objects
+    -this is very powerful! examples of commands that can use this class include
+    "look", open", and "close"
+    -in general, commands that only need the action and item (no arguments like
+        "put the candle in the chest") can use this class
+    ADD THIS LAST TO THE KERNEL OR ELSE IT WILL OVERRIDE THE OTHER COMMANDS
+    """
+
+    PATTERN = r"(?P<action_name>[\w]+) (?P<item_name>[\w\s\d]+)"
+    TEXT = {
+        "NO_ITEM": "There is no {item} in the {room} or in your inventory.",
+        "NO_COMMAND": "You can't {action} the {item}."
+    }
+
+    def __init__(self):
+        super(ActionCommand, self).__init__("action", ActionCommand.PATTERN)
+
+    def execute(self, world, action_name, item_name):
+        # fetch item from current room or in player's inventory
+        item = world.player.location.get(item_name)
+        if item == None:
+            item = world.player.get(item_name)
+
+
+        if item == None:
+            self.echo(ActionCommand.TEXT["NO_ITEM"].format(item=item_name,
+                room=world.player.location.name))
+        else:
+            action = item.get_action(action_name)
+
+            if action == None:
+                self.echo(ActionCommand.TEXT["NO_COMMAND"].format(action=action,
+                    item=item_name))
+            # call the action method!
+            else:
+                func = action[0]
+                # args is a keyword dictionary of arguments
+                args = action[1]
+                func(**args)
