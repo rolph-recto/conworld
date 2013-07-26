@@ -286,6 +286,7 @@ class ActionCommand(Command):
     "look", open", and "close"
     -in general, commands that only need the action and item (no arguments like
         "put the candle in the chest") can use this class
+
     ADD THIS LAST TO THE KERNEL OR ELSE IT WILL OVERRIDE THE OTHER COMMANDS
     """
 
@@ -312,8 +313,8 @@ class ActionCommand(Command):
             action = item.get_action(action_name)
 
             if action == None:
-                self.echo(ActionCommand.TEXT["NO_COMMAND"].format(action=action,
-                    item=item_name))
+                self.echo(ActionCommand.TEXT["NO_COMMAND"].format(
+                    action=action_name, item=item_name))
             # call the action method!
             else:
                 func = action[0]

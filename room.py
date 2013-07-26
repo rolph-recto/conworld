@@ -7,14 +7,98 @@ from .echo import EchoMixin
 from .item import Item
 
 
-class Path(object):
+class Path(EchoMixin):
     """
     path from one room to another
     """
 
-    def __init__(self, destination, blocked=False):
-        self.destination = destination
-        self.blocked = blocked
+    TEXT = {
+        "BLOCK": "The {path} to the {destination} is now {blocked}.",
+        "ALREADY_BLOCKED": ("The {path} to the {destination} "
+            "is already {blocked}."),
+        "UNBLOCK": "The {path} to the {destination} is now {unblocked}.",
+        "ALREADY_UNBLOCKED": "The {path} {destination} is already {unblocked}."
+    }
+
+    def __init__(self, name, destination, blocked=False,
+        verb_blocked="blocked", verb_unblocked="unblocked"):
+
+        super(Path, self).__init__()
+
+        self._name = name
+        self._destination = destination
+        self._blocked = blocked
+        # verb used to signify the path is blocked or unblocked
+        # (ex. the gate is "opened" or "closed"
+        # we use arguments for the verbs because subclassing path
+        # just to change the verbs would be a little excessive
+        self._verb_blocked = verb_blocked
+        self._verb_unblocked = verb_unblocked
+
+        # EVENTS
+        # path was blocked
+        self.on_block = Event()
+        self.on_unblock = Event()
+
+    @property
+    def name(self):
+        return self._name
+
+    @property
+    def destination(self):
+        return self._destination
+
+    @property
+    def blocked(self):
+        return self._blocked
+
+    @property
+    def verb_blocked(self):
+        return self._verb_blocked
+
+    @property
+    def verb_unblocked(self):
+        return self._verb_unblocked
+
+    def block(self, echo=True):
+        """
+        block the path
+        """
+        if not self._blocked:
+            self._blocked = True
+            if echo:
+                self.echo(Path.TEXT["BLOCK"].format(path=self._name,
+                    destination=self._destination.name,
+                    blocked=self._verb_blocked))
+            self.on_block.trigger()
+        else:
+            self.echo(Path.TEXT["ALREADY_BLOCKED"].format(path=self._name,
+                destination=self._destination.name, blocked=self._verb_blocked))
+
+    def unblock(self, echo=True):
+        """
+        unblock the path
+        """
+        if self._blocked:
+            self._blocked = False
+            if echo:
+                self.echo(Path.TEXT["UNBLOCK"].format(path=self._name,
+                    destination=self._destination.name,
+                    unblocked=self._verb_unblocked))
+            self.on_unblock.trigger()
+        else:
+            self.echo(Path.TEXT["ALREADY_UNBLOCKED"].format(path=self._name,
+                destination=self._destination.name,
+                unblocked=self._verb_unblocked))
+
+    def toggle(self, echo=True):
+        """
+        toggle between blocked and unblocked
+        """
+        if self._blocked:
+            self.unblock(echo)
+        else:
+            self.block(echo)
 
 
 class AbstractRoom(EchoMixin):
@@ -104,9 +188,10 @@ class Room(AbstractRoom):
 
     TEXT = {
         "ENTER": "You enter the {room}.",
-        "LOOK_PATH": "Looking {direction}wards, you see the {destination}. ",
-        "LOOK_PATH_BLOCK": ("Looking {direction}wards, you see the "
-            "{destination}, but the path is blocked."),
+        "LOOK_PATH": ("Looking {direction}wards, you see a {path} "
+            "to the {destination}. "),
+        "LOOK_PATH_BLOCKED": ("Looking {direction}wards, you see the "
+            "{destination} but the {path} is {blocked}."),
         "LOOK_ITEMS": ("Looking around the {room}, you see the "
             "following items: {items}"),
         "LOOK_EMPTY": "Looking around the {room}, you don't see any items.",
@@ -175,10 +260,12 @@ class Room(AbstractRoom):
             if not path == None:
                 if not path.blocked:
                     look_path += self.text["LOOK_PATH"].format(
-                        direction=direction, destination=path.destination)
+                        path=path.name, direction=direction,
+                        destination=path.destination)
                 else:
                     look_path += self.text["LOOK_PATH_BLOCKED"].format(
-                        direction=direction, destination=path.destination)
+                        path=path.name, direction=direction,
+                        destination=path.destination, blocked=path.verb_blocked)
 
         self.echo(look_path)
 
@@ -197,15 +284,17 @@ class Room(AbstractRoom):
         items_str = enumerate_items([item.name for item in visible_items])
 
         self.echo(look_str.format(room=self.name, items=items_str))
-
         self.on_look.trigger()
 
-    def add_path(self, direction, destination, blocked=False):
+    def add_path(self, name, direction, destination, blocked=False,
+        verb_blocked="blocked", verb_unblocked="unblocked"):
         """
         add a path to another room
         """
         if direction in DIRECTIONS:
-            path = Path(destination, blocked)
+            path = Path(name, destination, blocked, verb_blocked=verb_blocked,
+                verb_unblocked=verb_unblocked)
+            path.on_echo.subscribe(self._path_echo)
             self._paths[direction] = path
         else:
             raise ValueError("{} is not a direction".format(direction))
@@ -217,6 +306,7 @@ class Room(AbstractRoom):
         # by direction
         if type(dir_dest) == str:
             if dir_dest in DIRECTION:
+                path.on_echo.unsubscribe(self._path_echo)
                 self._paths[dir_dest] = None
             else:
                 raise ValueError("{} is not a direction".format(dir_dest))
@@ -231,13 +321,33 @@ class Room(AbstractRoom):
 
             # we found the destination; remove its path
             if not rm_dir == "":
+                path.on_echo.unsubscribe(self._path_echo)
                 self._paths[rm_dir] = None
 
     def get_path(self, direction):
+        """
+        get path by name, direction, or destination
+        """
+        # get path by direction
         if direction in DIRECTIONS:
             return self._paths[direction]
+
+        # get path by name or destination
         else:
-            raise ValueError("{} is not a direction".format(dir_dest))
+            for direction, path in self._paths.iteritems():
+                if not path == None:
+                    if path.name == direction:
+                        return path
+                    elif path.destination.name == direction:
+                        return path
+
+            return None
+
+    def _path_echo(self, msg):
+        """
+        relay path messages to room callbacks
+        """
+        self.echo(msg)
 
 
 
