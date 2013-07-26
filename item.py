@@ -57,7 +57,7 @@ class Item(AbstractItem):
         self._containable = containable
         self._container = container
 
-        self.owner = None # the container the item is in
+        self._owner = None # the container the item is in
         self._room = None
         self._player = None # the player whose inventory the item is in
 
@@ -76,6 +76,17 @@ class Item(AbstractItem):
     @property
     def container(self):
         return self._container
+
+    @property
+    def owner(self):
+        return self._owner
+
+    @owner.setter
+    def owner(self, new_owner):
+        self._owner = new_owner
+        if not new_owner == None:
+            self.player = new_owner.player
+            self.room = new_owner.room
 
     @property
     def room(self):
@@ -100,7 +111,7 @@ class Item(AbstractItem):
     def player(self):
         return self._player
 
-    @room.setter
+    @player.setter
     def player(self, new_player):
         """
         set player who possesses the item
@@ -161,12 +172,12 @@ class Container(Item):
         # containers can't be containable themselves (for now)
         # maybe add Russian doll-style recursive containers later?
         super(Container, self).__init__(name, synonyms, description,
-            inventory, containable=False, container=True)
+            inventory=inventory, containable=False, container=True)
 
         # template strings for printing
         self.text.update(Container.TEXT)
         self._items = []
-        self.insert_items(items)
+        self._insert(items)
         self._locked = locked
         self._opened = False if locked else opened
 
@@ -184,16 +195,10 @@ class Container(Item):
         # item removed from container
         self.on_remove_item = Event()
 
-    # opened is read-only
     @property
-    def opened(self):
-        return self._opened
+    def items(self):
+        return self._items
 
-    @property
-    def locked(self):
-        return self._locked
-
-    # override Item.room property
     @property
     def room(self):
         return self._room
@@ -213,9 +218,41 @@ class Container(Item):
         if not new_room == None:
             self.on_echo.subscribe(self._room.object_echo)
 
-        # set new room for all items in the container as well
+        # do the same for all the items in the container
         for item in self._items:
             item.room = new_room
+
+    @property
+    def player(self):
+        return self._player
+
+    @player.setter
+    def player(self, new_player):
+        """
+        set player who possesses the item
+        """
+        # unsubscribe current player
+        if not self._player == None:
+            self.on_echo.unsubscribe(self._player.object_echo)
+
+        # subscribe new player
+        self._player = new_player
+        # only if it's actually a player, though
+        if not new_player == None:
+            self.on_echo.subscribe(self._player.object_echo)
+
+        # do the same for all the items in the container
+        for item in self._items:
+            item.player = new_player
+
+    # opened is read-only
+    @property
+    def opened(self):
+        return self._opened
+
+    @property
+    def locked(self):
+        return self._locked
 
     def look(self, describe_self=True, describe_items=True):
         """
@@ -340,27 +377,30 @@ class Container(Item):
             self.echo(self.text["CLOSED"].format(name=self.name))
             return
 
-        item.owner = self
-        self._items.append(item)
+        self._insert(item)
         self.echo(self.text["ADD"].format(name=self.name,
             item=item.name))
         self.on_add_item.trigger()
 
-    def insert_item(self, item):
-        """
-        insert a single item to container
-        """
-        if not item in self._items:
-            item.owner = self
-            self._items.append(item)
-
-    def insert_items(self, items):
+    def _insert(self, items):
         """
         this is used internally to manually add items to the container
         this is NOT called by the player; it does not print messages
         """
+        if not type(items) == list:
+            items = [items]
+
         for item in items:
             if not item in self._items:
+                # move item to the container's room, if it isn't
+                if item.room == None and not self.room == None:
+                    item.player._erase(item)
+                    self.room.add(item)
+                # move item to the player inventory, if it isn't
+                elif item.player == None and not self.player == None:
+                    item.room.remove(item)
+                    self.player._insert(item)
+
                 item.owner = self
                 self._items.append(item)
 
@@ -382,12 +422,11 @@ class Container(Item):
             self.echo(self.text["CLOSED"].format(name=self.name))
             return
 
-        item.owner = None
-        self._items.remove(item)
+        self._erase(item)
         self.echo(self.text["REMOVE"].format(name=self.name, item=item.name))
         self.on_remove_item.trigger()
 
-    def erase_item(self, item):
+    def _erase(self, item):
         """
         like the remove() counterpart of insert()
         """

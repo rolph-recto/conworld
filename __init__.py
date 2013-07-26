@@ -12,6 +12,9 @@ DIRECTION_SYNONYMS = {
     "d": "down"
 }
 
+# words that should be removed from a command string
+STOPWORDS = ["the", "a", "in", "at", "to", "room", "around"]
+
 def enumerate_items(items):
     """
     list items in a string

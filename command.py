@@ -3,7 +3,7 @@
 
 import re
 
-from . import DIRECTIONS, DIRECTION_SYNONYMS, enumerate_items
+from . import DIRECTIONS, DIRECTION_SYNONYMS, STOPWORDS, enumerate_items
 from .echo import EchoMixin
 
 
@@ -11,9 +11,6 @@ class Command(EchoMixin):
     """
     user-specified tasks that interact with the world
     """
-
-    # words that should be removed from a command string
-    STOPWORDS = ["the", "a", "in", "at", "to", "room", "around"]
 
     def __init__(self, name, pattern):
         super(Command, self).__init__()
@@ -31,8 +28,7 @@ class Command(EchoMixin):
     def __str__(self):
         return self._name
 
-    @classmethod
-    def _preprocess(cls, input):
+    def _preprocess(self, input):
         """
         clean up text before matching it with the command pattern
         this makes the command string patterns much simpler
@@ -44,7 +40,7 @@ class Command(EchoMixin):
         result = re.sub(r"[`~!@#$%^&*()-=_+,./<>?;':\"\[\]{}\|]", "", result)
         # remove stopwords
         result = " ".join([word for word in result.split()
-            if not word in Command.STOPWORDS])
+            if not word in STOPWORDS])
         # strip of leading / trailing whitespace
         result = result.strip()
         # normalize whitespace (convert sequence of spaces to 1 space)
@@ -58,7 +54,7 @@ class Command(EchoMixin):
         returns either true if the pattern matches and the command is executed
         or false if the pattern doesn't match
         """
-        input = Command._preprocess(input)
+        input = self._preprocess(input)
         cmd_pattern = re.compile(self._pattern)
         output = cmd_pattern.search(input)
 
@@ -109,10 +105,10 @@ class LookItemCommand(Command):
 
     def execute(self, world, item_name):
         # check if the item is in the current room
-        item = world.player.location.get_item(item_name)
+        item = world.player.location.get(item_name)
         # try to look for the item in the player's inventory
         if item == None:
-            item = world.player.get_item(item_name)
+            item = world.player.get(item_name)
 
         if not item == None:
             if ((not item.owner == None) and item.owner.opened) or \
@@ -156,6 +152,7 @@ class TakeCommand(Command):
 
     PATTERN = r"take (?P<item_name>[\w\s\d]+)"
     TEXT = {
+        "ALREADY_IN_INVENTORY": "The {item} is already in your inventory.",
         "NO_ITEM": "There is no {item} in the {room}."
     }
 
@@ -163,14 +160,19 @@ class TakeCommand(Command):
         super(TakeCommand, self).__init__("take", TakeCommand.PATTERN)
 
     def execute(self, world, item_name):
-        # check if the item is in the current room
-        item = world.player.location.get_item(item_name)
-
-        if not item == None:
-            world.player.take(item)
+        # check if the item isn't alerady in the player's inventory
+        if not world.player.get(item_name) == None:
+            self.echo(TakeCommand.TEXT["ALREADY_IN_INVENTORY"].format(
+                item=item_name))
         else:
-            self.echo(TakeCommand.TEXT["NO_ITEM"].format(
-                item=item_name, room=world.player.location.name))
+            # check if the item is in the current room
+            item = world.player.location.get(item_name)
+
+            if not item == None:
+                world.player.take(item)
+            else:
+                self.echo(TakeCommand.TEXT["NO_ITEM"].format(
+                    item=item_name, room=world.player.location.name))
 
 
 class DiscardCommand(Command):
@@ -188,12 +190,78 @@ class DiscardCommand(Command):
 
     def execute(self, world, item_name):
         # check if item is in player's inventory
-        item = world.player.get_item(item_name)
+        item = world.player.get(item_name)
 
         if not item == None:
             world.player.discard(item)
         else:
             self.echo(DiscardCommand.TEXT["NO_ITEM"].format(item=item_name))
+
+
+class PutCommand(Command):
+    """
+    put an item in a container
+    """
+    # use custom stopword list -- omit "in" because we use that in the pattern
+    CUSTOM_STOPWORDS = ["the", "a", "at", "to", "room", "around"]
+    PATTERN = (r"(put|place) (?P<item_name>[\w\d\s]+) in "
+        r"(?P<container_name>[\w\d\s]+)")
+    TEXT = {
+        "NO_ITEM": "There is no {item} in the {room} or in your inventory.",
+        "NO_CONTAINER": ("There is no {container} in the {room}"
+            " or in your inventory."),
+        "NOT_CONTAINER": "{container} is not a container."
+    }
+
+    def __init__(self):
+        super(PutCommand, self).__init__("put", PutCommand.PATTERN)
+
+    def _preprocess(self, input):
+        """
+        override Command._preprocess because we need a custom stopwords list
+        """
+        # set to lowercase
+        result = input.lower()
+        # strip punctuation
+        result = re.sub(r"[`~!@#$%^&*()-=_+,./<>?;':\"\[\]{}\|]", "", result)
+        # remove stopwords
+        result = " ".join([word for word in result.split()
+            if not word in PutCommand.CUSTOM_STOPWORDS])
+        # strip of leading / trailing whitespace
+        result = result.strip()
+        # normalize whitespace (convert sequence of spaces to 1 space)
+        result = re.sub(r"[\s]{2,}", " ", result)
+
+        return result
+
+    def execute(self, world, item_name, container_name):
+        # find item in room or in player's inventory
+        item = world.player.location.get(item_name)
+        if item == None:
+            item = world.player.get(item_name)
+
+        # find container in room or in player's inventory
+        container = world.player.location.get(container_name)
+        if container == None:
+            container = world.player.get(container_name)
+
+        # success
+        if not item == None and not container == None:
+            if container.container:
+                container.add(item)
+            else:
+                self.echo(PutCommand.TEXT["NOT_CONTAINER"].format(
+                    container=container_name))
+
+        # item doesn't exist
+        elif item == None:
+            self.echo(PutCommand.TEXT["NO_ITEM"].format(item=item_name,
+                room=world.player.location.name))
+        # container doesn't exist
+        else:
+            self.echo(PutCommand.TEXT["NO_CONTAINER"].format(
+                container=container_name, room=world.player.location.name))
+
 
 
 class InventoryCommand(Command):
@@ -213,7 +281,9 @@ class InventoryCommand(Command):
 
     def execute(self, world):
         # get player inventory
-        items = [item.name for item in world.player.inventory]
+        # only display items not stored in containers
+        items = [item.name for item in world.player.inventory
+            if item.owner == None]
 
         if len(items) >= 1:
             self.echo(InventoryCommand.TEXT["INVENTORY"].format(

@@ -73,28 +73,49 @@ class Player(EchoMixin):
             item.owner.remove(item)
 
         # the item is "roomless" when it is in the inventory
-        item.room.remove_item(item)
-        item.player = self
-        self._inventory.append(item)
+        self._insert(item)
         self.echo(self.text["TAKE"].format(item=item.name))
         self.on_take_item.trigger()
+
+    def _insert(self, item):
+        """
+        insert an item to inventory without echoing
+        """
+        if not item.room == None:
+            item.room.remove(item)
+
+        item.player = self
+        self._inventory.append(item)
+
+        # if the item is a container, add to inventory its contents
+        if item.container:
+            for con_item in item.items:
+                self._insert(con_item)
 
     def discard(self, item):
         """
         remove an item from inventory
         """
         if item in self._inventory:
-            # put item back into room when it is discarded
-            self.location.add_item(item)
-            item.player = None
-            self._inventory.remove(item)
+            self._erase(item)
             self.on_discard_item.trigger()
             self.echo(self.text["DISCARD"].format(item=item.name,
                 room=self.location.name))
         else:
             self.echo(self.text["DISCARD"].format(item=item.name))
 
-    def get_item(self, item_name):
+    def _erase(self, item):
+        if item in self._inventory:
+            # put item back into room when it is discarded
+            self.location.add(item)
+            self._inventory.remove(item)
+
+            # if the item is a container, throw away from inventory its contents
+            if item.container:
+                for con_item in item.items:
+                    self._erase(con_item)
+
+    def get(self, item_name):
         """
         get item from inventory by its name
         """

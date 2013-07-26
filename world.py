@@ -29,9 +29,6 @@ class AbstractWorld(EchoMixin):
             if not room in self._rooms:
                 room.world = self
                 self._rooms.append(room)
-            else:
-                raise RuntimeError("{room} is already in world"
-                    .format(room=room.name))
 
     def remove_room(self, room):
         """
@@ -40,9 +37,6 @@ class AbstractWorld(EchoMixin):
         if room in self._rooms:
             room.world = None
             self._rooms.remove(room)
-        else:
-            raise RuntimeError("{room} is not in the world"
-                .format(room=room.name))
 
     def room_echo(self, msg):
         """

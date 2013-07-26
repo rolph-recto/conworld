@@ -28,7 +28,7 @@ class AbstractRoom(EchoMixin):
         self._name = name
         self.description = description
         self._items = []
-        self.add_items(items)
+        self.add(items)
 
     # name property is read-only
     @property
@@ -41,36 +41,44 @@ class AbstractRoom(EchoMixin):
     def __str__(self):
         return self.name
 
-    def add_item(self, item):
-        """
-        add a single item to the room
-        """
-        self.add_items([item])
-
-    def add_items(self, items):
+    def add(self, items):
         """
         add a list of items to the room
         """
+        if not type(items) == list:
+            items = [items]
+
         for item in items:
             if not item in self._items:
                 item.room = self
                 self._items.append(item)
-            else:
-                raise RuntimeError("{item} is already in {room}"
-                    .format(item=item.name, room=self.name))
 
-    def remove_item(self, item):
+                #if the item was in the player's inventory, take it off
+                item.player = None
+
+                # add items in a container
+                if item.container:
+                    for con_item in item.items:
+                        self.add(con_item)
+
+    def remove(self, item):
         """
         remove an item from the room
         """
         if item in self._items:
             item.room = None
             self._items.remove(item)
+
+            # remove items in a container
+            if item.container:
+                for con_item in item.items:
+                    self.remove(con_item)
+
         else:
             raise RuntimeError("{item} is not in {room}"
                 .format(item=item.name, room=self.name))
 
-    def get_item(self, item_name):
+    def get(self, item_name):
         """
         get item by name
         """
@@ -177,8 +185,7 @@ class Room(AbstractRoom):
         # describe items
         look_str = ""
         # can't see items in closed containers
-        visible_items = [item for item in self._items
-            if item.owner == None or item.owner.opened]
+        visible_items = [item for item in self._items if item.owner == None]
 
         # multiple items in container
         if len(visible_items) >= 1:
