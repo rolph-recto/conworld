@@ -13,7 +13,7 @@ DIRECTION_SYNONYMS = {
 }
 
 # words that should be removed from a command string
-STOPWORDS = ["the", "a", "in", "at", "to", "room", "around"]
+STOPWORDS = ["the", "a", "on", "in", "inside", "at", "to", "room", "around"]
 
 def enumerate_items(items):
     """
