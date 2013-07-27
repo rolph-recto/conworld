@@ -4,24 +4,25 @@
 from . import DIRECTIONS, enumerate_items
 from .event import Event
 from .echo import EchoMixin
+from .text_template import TextTemplateMixin
 from .item import Item
 
 
-class Path(EchoMixin):
+class Path(EchoMixin, TextTemplateMixin):
     """
     path from one room to another
     """
 
     TEXT = {
-        "BLOCK": "The {path} to the {destination} is now {blocked}.",
+        "BLOCK": "The {path} to the {destination} is now blocked.",
         "ALREADY_BLOCKED": ("The {path} to the {destination} "
-            "is already {blocked}."),
-        "UNBLOCK": "The {path} to the {destination} is now {unblocked}.",
-        "ALREADY_UNBLOCKED": "The {path} {destination} is already {unblocked}."
+            "is already blocked."),
+        "UNBLOCK": "The {path} to the {destination} is now unblocked.",
+        "ALREADY_UNBLOCKED": ("The {path} to the {destination} "
+            "is already unblocked.")
     }
 
-    def __init__(self, name, destination, blocked=False,
-        verb_blocked="blocked", verb_unblocked="unblocked"):
+    def __init__(self, name, destination, blocked=False, text={}):
 
         super(Path, self).__init__()
 
@@ -32,8 +33,7 @@ class Path(EchoMixin):
         # (ex. the gate is "opened" or "closed"
         # we use arguments for the verbs because subclassing path
         # just to change the verbs would be a little excessive
-        self._verb_blocked = verb_blocked
-        self._verb_unblocked = verb_unblocked
+        self.update_text(text)
 
         # EVENTS
         # path was blocked
@@ -52,13 +52,13 @@ class Path(EchoMixin):
     def blocked(self):
         return self._blocked
 
-    @property
-    def verb_blocked(self):
-        return self._verb_blocked
-
-    @property
-    def verb_unblocked(self):
-        return self._verb_unblocked
+    def context(self, **extra):
+        context = super(Room, self).context(**extra)
+        context.update({
+            "path": self._name,
+            "destination": self._destination.name
+        })
+        return context
 
     def block(self, echo=True):
         """
@@ -66,14 +66,10 @@ class Path(EchoMixin):
         """
         if not self._blocked:
             self._blocked = True
-            if echo:
-                self.echo(Path.TEXT["BLOCK"].format(path=self._name,
-                    destination=self._destination.name,
-                    blocked=self._verb_blocked))
+            if echo: self.echo(self.text("BLOCK"))
             self.on_block.trigger()
         else:
-            self.echo(Path.TEXT["ALREADY_BLOCKED"].format(path=self._name,
-                destination=self._destination.name, blocked=self._verb_blocked))
+            self.echo(self.text("ALREADY_UNBLOCKED"))
 
     def unblock(self, echo=True):
         """
@@ -81,15 +77,10 @@ class Path(EchoMixin):
         """
         if self._blocked:
             self._blocked = False
-            if echo:
-                self.echo(Path.TEXT["UNBLOCK"].format(path=self._name,
-                    destination=self._destination.name,
-                    unblocked=self._verb_unblocked))
+            if echo: self.echo(self.text("UNBLOCK"))
             self.on_unblock.trigger()
         else:
-            self.echo(Path.TEXT["ALREADY_UNBLOCKED"].format(path=self._name,
-                destination=self._destination.name,
-                unblocked=self._verb_unblocked))
+            self.echo(self.text("ALREADY_BLOCKED"))
 
     def toggle(self, echo=True):
         """
@@ -180,31 +171,32 @@ class AbstractRoom(EchoMixin):
         self.echo(msg)
 
 
-class Room(AbstractRoom):
+class Room(AbstractRoom, TextTemplateMixin):
     """
     atomic constituent of a world (i.e., a set of rooms make a world)
     can contain items and paths to other rooms
     """
 
     TEXT = {
+        "DESCRIPTION": "{description}",
         "ENTER": "You enter the {room}.",
         "LOOK_PATH": ("Looking {direction}wards, you see a {path} "
             "to the {destination}. "),
         "LOOK_PATH_BLOCKED": ("Looking {direction}wards, you see the "
-            "{destination} but the {path} is {blocked}."),
+            "{destination} but the {path} is blocked."),
         "LOOK_ITEMS": ("Looking around the {room}, you see the "
             "following items: {items}"),
         "LOOK_EMPTY": "Looking around the {room}, you don't see any items.",
     }
 
-    def __init__(self, name, description="", items=[], world=None):
+    def __init__(self, name, description="", items=[], world=None, text={}):
         super(Room, self).__init__(name, description, items)
         # paths to other rooms
         self._paths = dict([(direction, None) for direction in DIRECTIONS])
         self._world = None
         self.world = world
-        self.text = {}
-        self.text.update(Room.TEXT)
+        self.update_text(Room.TEXT)
+        self.update_text(text)
 
         # EVENTS
         # player entered room
@@ -224,21 +216,34 @@ class Room(AbstractRoom):
         set the world the room is in
         """
         # unsubscribe current world
-        if not self._world == None:
+        if self._world is not None:
             self.on_echo.unsubscribe(self._world.room_echo)
 
         # subscribe new world
         self._world = new_world
         # only if it's actually a world, though
-        if not new_world == None:
+        if new_world is not None:
             self.on_echo.subscribe(self._world.room_echo)
+
+    def context(self, **extra):
+        context = super(Room, self).context(**extra)
+
+        visible_items = [item for item in self._items if item.owner is None]
+        items_str = enumerate_items([item.name for item in visible_items])
+        context.update({
+            "room": self.name,
+            "description": self.description,
+            "items": items_str
+        })
+
+        return context
 
     def enter(self):
         """
         player has entered the room
         """
         # player looks around when he/she enters
-        self.echo(self.text["ENTER"].format(room=self.name))
+        self.echo(self.text("ENTER"))
         self.look()
         self.on_enter.trigger()
 
@@ -252,48 +257,39 @@ class Room(AbstractRoom):
         """
         player looks around the room
         """
-        self.echo(self.description)
+        self.echo(self.text("DESCRIPTION"))
 
         # describe paths
         look_path = ""
         for direction, path in self._paths.iteritems():
-            if not path == None:
+            if path is not None:
                 if not path.blocked:
-                    look_path += self.text["LOOK_PATH"].format(
+                    look_path += self.text("LOOK_PATH",
                         path=path.name, direction=direction,
-                        destination=path.destination)
+                        destination=path.destination) + " "
                 else:
-                    look_path += self.text["LOOK_PATH_BLOCKED"].format(
+                    look_path += self.text("LOOK_PATH_BLOCKED",
                         path=path.name, direction=direction,
-                        destination=path.destination, blocked=path.verb_blocked)
+                        destination=path.destination) + " "
 
         self.echo(look_path)
 
-        # describe items
-        look_str = ""
-        # can't see items in closed containers
-        visible_items = [item for item in self._items if item.owner == None]
-
         # multiple items in container
+        visible_items = [item for item in self._items if item.owner is None]
         if len(visible_items) >= 1:
-            look_str = self.text["LOOK_ITEMS"]
+            self.echo(self.text("LOOK_ITEMS"))
         # no items
         else:
-            look_str = self.text["LOOK_EMPTY"]
+            self.echo(self.text("LOOK_EMPTY"))
 
-        items_str = enumerate_items([item.name for item in visible_items])
-
-        self.echo(look_str.format(room=self.name, items=items_str))
         self.on_look.trigger()
 
-    def add_path(self, name, direction, destination, blocked=False,
-        verb_blocked="blocked", verb_unblocked="unblocked"):
+    def add_path(self, name, direction, destination, blocked=False, text={}):
         """
         add a path to another room
         """
         if direction in DIRECTIONS:
-            path = Path(name, destination, blocked, verb_blocked=verb_blocked,
-                verb_unblocked=verb_unblocked)
+            path = Path(name, destination, blocked, text={})
             path.on_echo.subscribe(self._path_echo)
             self._paths[direction] = path
         else:
@@ -335,7 +331,7 @@ class Room(AbstractRoom):
         # get path by name or destination
         else:
             for direction, path in self._paths.iteritems():
-                if not path == None:
+                if path is not None:
                     if path.name == direction:
                         return path
                     elif path.destination.name == direction:

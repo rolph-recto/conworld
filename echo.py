@@ -12,6 +12,7 @@ class EchoMixin(object):
     def __init__(self):
         self.on_echo = Event()
 
+        # call the next mixin constructor, if it exists
         # this makes multiple inheritance work
         super(EchoMixin, self).__init__()
 

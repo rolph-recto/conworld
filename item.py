@@ -3,6 +3,7 @@
 
 from .event import Event
 from .echo import EchoMixin
+from .text_template import TextTemplateMixin
 
 
 class AbstractItem(EchoMixin):
@@ -20,8 +21,6 @@ class AbstractItem(EchoMixin):
         # other names that the item can be called
         # these must also be unique to the room
         self.synonyms = synonyms
-        # template strings for printing
-        self.text = {}
         # set of custom actions that the player can do to the item
         # the key in the action dict is the keyword of the action
         # and the value is a tuple containing the method to call (val[0])
@@ -68,7 +67,7 @@ class AbstractItem(EchoMixin):
             return None
 
 
-class Item(AbstractItem):
+class Item(AbstractItem, TextTemplateMixin):
     """
     objects that reside within the world
 
@@ -82,11 +81,12 @@ class Item(AbstractItem):
     """
 
     TEXT = {
-        "USE": "You use the {item}."
+        "USE": "You use the {item}.",
+        "DESCRIPTION": "{description}"
     }
 
     def __init__(self, name, synonyms=(), description="", inventory=False,
-        containable=True, container=False):
+        containable=True, container=False, text={}):
 
         super(Item, self).__init__(name, synonyms, description)
 
@@ -99,6 +99,10 @@ class Item(AbstractItem):
         self._room = None
         self._player = None # the player whose inventory the item is in
 
+        # update text templates
+        self.update_text(Item.TEXT)
+        self.update_text(text)
+
         # EVENTS
         # player looked at this item
         self.add_action("look", self.look)
@@ -107,9 +111,6 @@ class Item(AbstractItem):
         # or have callbacks to it
         self.add_action("use", self.use)
         self.on_use = Event()
-
-        # update printing templates
-        self.text.update(Item.TEXT)
 
     @property
     def inventory(self):
@@ -130,7 +131,7 @@ class Item(AbstractItem):
     @owner.setter
     def owner(self, new_owner):
         self._owner = new_owner
-        if not new_owner == None:
+        if new_owner is not None:
             self.player = new_owner.player
             self.room = new_owner.room
 
@@ -144,13 +145,13 @@ class Item(AbstractItem):
         set the room the item is in
         """
         # unsubscribe current room
-        if not self._room == None:
+        if self._room is not None:
             self.on_echo.unsubscribe(self._room.object_echo)
 
         # subscribe new room
         self._room = new_room
         # only if it's actually a room, though
-        if not new_room == None:
+        if new_room is not None:
             self.on_echo.subscribe(self._room.object_echo)
 
     @property
@@ -163,28 +164,44 @@ class Item(AbstractItem):
         set player who possesses the item
         """
         # unsubscribe current player
-        if not self._player == None:
+        if self._player is not None:
             self.on_echo.unsubscribe(self._player.object_echo)
 
         # subscribe new player
         self._player = new_player
         # only if it's actually a player, though
-        if not new_player == None:
+        if new_player is not None:
             self.on_echo.subscribe(self._player.object_echo)
+
+    def context(self, **extra):
+        context = super(Item, self).context(**extra)
+
+        if self._room is None:
+            room = self._player.location.name
+        else:
+            room = self._room.name
+
+        context.update({
+            "name": self._name,
+            "description": self.description,
+            "room": room
+        })
+
+        return context
 
     def look(self):
         """
         player looked at item
         """
         # print description
-        self.echo(self.description)
+        self.echo(self.text("DESCRIPTION"))
         self.on_look.trigger()
 
     def use(self):
         """
         use the item
         """
-        self.echo(self.text["USE"].format(item=self.name))
+        self.echo(self.text("USE", item=self.name))
         self.on_use.trigger()
 
 
@@ -219,8 +236,9 @@ class Container(Item):
         "ALREADY_REMOVED": "The {item} is not in the {name}."
     }
 
-    def __init__(self, name, synonyms=(), description="", items=[], opened=False,
-        locked=False, inventory=False, containable=False):
+    def __init__(self, name, synonyms=(), description="", items=[],
+        opened=False, locked=False, inventory=False, containable=False,
+        text={}):
 
         # containers can't be containable themselves (for now)
         # maybe add Russian doll-style recursive containers later?
@@ -231,6 +249,10 @@ class Container(Item):
         self._insert(items)
         self._locked = locked
         self._opened = False if locked else opened
+
+        # template strings for printing
+        self.update_text(Container.TEXT)
+        self.update_text(text)
 
         # EVENTS
         # player opened this container
@@ -250,9 +272,6 @@ class Container(Item):
         # item removed from container
         self.on_remove_item = Event()
 
-        # template strings for printing
-        self.text.update(Container.TEXT)
-
     @property
     def items(self):
         return self._items
@@ -267,13 +286,13 @@ class Container(Item):
         set the room the item is in
         """
         # unsubscribe current room
-        if not self._room == None:
+        if self._room is not None:
             self.on_echo.unsubscribe(self._room.object_echo)
 
         # subscribe new room
         self._room = new_room
         # only if it's actually a room, though
-        if not new_room == None:
+        if new_room is not None:
             self.on_echo.subscribe(self._room.object_echo)
 
         # do the same for all the items in the container
@@ -290,13 +309,13 @@ class Container(Item):
         set player who possesses the item
         """
         # unsubscribe current player
-        if not self._player == None:
+        if self._player is not None:
             self.on_echo.unsubscribe(self._player.object_echo)
 
         # subscribe new player
         self._player = new_player
         # only if it's actually a player, though
-        if not new_player == None:
+        if new_player is not None:
             self.on_echo.subscribe(self._player.object_echo)
 
         # do the same for all the items in the container
@@ -312,6 +331,28 @@ class Container(Item):
     def locked(self):
         return self._locked
 
+    def context(self, **extra):
+        context = super(Container, self).context(**extra)
+
+        items_str = ""
+
+        # multiple items in container
+        if len(self._items) > 1:
+            for item in self._items[:-2]:
+                items_str += "{}, ".format(item.name)
+
+            items_str += "{} ".format(self._items[-2].name)
+            items_str += "and {}".format(self._items[-1].name)
+        # one item
+        elif len(self._items) == 1:
+            items_str += self._items[0].name
+
+        context.update({
+            "items": items_str
+        })
+
+        return context
+
     def look(self, describe_self=True, describe_items=True):
         """
         override Item.look() to include items inside the container if it is open
@@ -320,33 +361,23 @@ class Container(Item):
         if describe_self:
             self.echo(self.description)
             if self._opened:
-                self.echo(self.text["OPENED"].format(name=self.name))
+                self.echo(self.text("OPENED"))
             else:
-                self.echo(self.text["CLOSED"].format(name=self.name))
+                self.echo(self.text("CLOSED"))
 
         # print items in the container if it is open
         if describe_items and self._opened:
             opened_str = ""
-            items_str = ""
 
             # multiple items in container
             if len(self._items) > 1:
-                opened_str = self.text["LOOK_ITEMS"]
-
-                for item in self._items[:-2]:
-                    items_str += "{}, ".format(item.name)
-
-                items_str += "{} ".format(self._items[-2].name)
-                items_str += "and {}".format(self._items[-1].name)
+                self.echo(self.text("LOOK_ITEMS"))
             # one item
             elif len(self._items) == 1:
-                opened_str = self.text["LOOK_ITEMS"]
-                items_str += self._items[0].name
+                self.echo(self.text("LOOK_ITEMS"))
             # no items
             else:
-                opened_str = self.text["LOOK_EMPTY"]
-
-            self.echo(opened_str.format(name=self.name, items=items_str))
+                self.echo(self.text("LOOK_EMPTY"))
 
         # send trigger
         self.on_look.trigger()
@@ -358,15 +389,15 @@ class Container(Item):
         if not self._opened:
             if not self._locked:
                 self._opened = True
-                self.echo(self.text["OPEN"].format(name=self.name))
+                self.echo(self.text("OPEN"))
                 # you look inside the container when you open it
                 # don't describe the container again, though
                 self.look(describe_self=False)
                 self.on_open.trigger()
             else:
-                self.echo(self.text["OPEN_LOCKED"].format(name=self.name))
+                self.echo(self.text("OPEN_LOCKED"))
         else:
-            self.echo(self.text["ALREADY_OPEN"].format(name=self.name))
+            self.echo(self.text("ALREADY_OPEN"))
 
     def close(self):
         """
@@ -374,10 +405,10 @@ class Container(Item):
         """
         if self._opened:
             self._opened = False
-            self.echo(self.text["CLOSE"].format(name=self.name))
+            self.echo(self.text("CLOSE"))
             self.on_close.trigger()
         else:
-            self.echo(self.text["ALREADY_CLOSED"].format(name=self.name))
+            self.echo(self.text("ALREADY_CLOSED"))
 
     def unlock(self):
         """
@@ -385,12 +416,12 @@ class Container(Item):
         """
         if self._locked:
             self._locked = False
-            self.echo(self.text["UNLOCK"].format(name=self.name))
+            self.echo(self.text("UNLOCK"))
             self.on_unlock.trigger()
             # open the container too
             self.open()
         else:
-            self.echo(self.text["ALREADY_UNLOCKED"].format(name=self.name))
+            self.echo(self.text("ALREADY_UNLOCKED"))
 
     def lock(self):
         """
@@ -402,42 +433,38 @@ class Container(Item):
                 self.close()
 
             self._locked = True
-            self.echo(self.text["LOCK"].format(name=self.name))
+            self.echo(self.text("LOCK"))
             self.on_lock.trigger()
         else:
-            self.echo(self.text["ALREADY_LOCKED"].format(name=self.name))
+            self.echo(self.text("ALREADY_LOCKED"))
 
     def add(self, item):
         """
         add item to container
         """
-        if not item.owner == None:
-            self.echo(self.text["ADD_CONTAINED"].format(item=item.name,
+        if item.owner is not None:
+            self.echo(self.text("ADD_CONTAINED", item=item.name,
                 container=item.owner.name))
             return
 
         if item in self._items:
-            self.echo(self.text["ALREADY_ADDED"].format(name=self.name,
-                item=item.name))
+            self.echo(self.text("ALREADY_ADDED", item=item.name))
             return
 
         if not item._containable:
-            self.echo(self.text["ADD_NOT_CONTAINABLE"].format(name=self.name,
-                item=item.name))
+            self.echo(self.text("ADD_NOT_CONTAINABLE", item=item.name))
             return
 
         if self._locked:
-            self.echo(self.text["ADD_LOCKED"].format(name=self.name,
-                item=item.name))
+            self.echo(self.text("ADD_LOCKED", item=item.name))
             return
         
         if not self._opened:
-            self.echo(self.text["CLOSED"].format(name=self.name))
+            self.echo(self.text("CLOSED"))
             return
 
         self._insert(item)
-        self.echo(self.text["ADD"].format(name=self.name,
-            item=item.name))
+        self.echo(self.text("ADD", item=item.name))
         self.on_add_item.trigger()
 
     def _insert(self, items):
@@ -451,11 +478,11 @@ class Container(Item):
         for item in items:
             if not item in self._items:
                 # move item to the container's room, if it isn't
-                if item.room == None and not self.room == None:
+                if item.room is None and self.room is not None:
                     item.player._erase(item)
                     self.room.add(item)
                 # move item to the player inventory, if it isn't
-                elif item.player == None and not self.player == None:
+                elif item.player is None and self.player is not None:
                     item.room.remove(item)
                     self.player._insert(item)
 
@@ -467,21 +494,19 @@ class Container(Item):
         remove item from container
         """
         if not item in self._items:
-            self.echo(self.text["ALREADY_REMOVED"].format(name=self.name,
-                item=item.name))
+            self.echo(self.text("ALREADY_REMOVED", item=item.name))
             return
 
         if self._locked:
-            self.echo(self.text["REMOVE_LOCKED"].format(name=self.name,
-                item=item.name))
+            self.echo(self.text("REMOVE_LOCKED", item=item.name))
             return
 
         if not self._opened:
-            self.echo(self.text["CLOSED"].format(name=self.name))
+            self.echo(self.text("CLOSED"))
             return
-
+ 
         self._erase(item)
-        self.echo(self.text["REMOVE"].format(name=self.name, item=item.name))
+        self.echo(self.text("REMOVE", item=item.name))
         self.on_remove_item.trigger()
 
     def _erase(self, item):
@@ -509,13 +534,13 @@ class Key(Item):
     """
 
     TEXT = {
-        "NO_CONTAINER_TO_OPEN": "{item} doesn't unlock anything.",
-        "CONTAINER_NOT_IN_ROOM": "{item} doesn't open anything in the {room}."
+        "NO_CONTAINER_TO_OPEN": "{name} doesn't unlock anything.",
+        "CONTAINER_NOT_IN_ROOM": "{name} doesn't open anything in the {room}."
     }
 
     def __init__(self, name, synonyms=(), description="",
         container_to_open=None, inventory=True, containable=True,
-        container=False):
+        container=False, text={}):
 
         super(Key, self).__init__(name, synonyms, description,
             inventory=inventory, containable=containable, container=container)
@@ -523,8 +548,9 @@ class Key(Item):
         self._container_to_open = None
         self.container_to_open = container_to_open
 
-        # update text templates
-        self.text.update(Container.TEXT)
+        # text templates
+        self.update_text(Key.TEXT)
+        self.update_text(text)
 
     @property
     def container_to_open(self):
@@ -532,26 +558,25 @@ class Key(Item):
 
     @container_to_open.setter
     def container_to_open(self, container):
-        if container == None or isinstance(container, Container):
+        if container is None or isinstance(container, Container):
             self._container_to_open = container
         else:
             raise TypeError("Tried to set non-container as item to open")
 
     def use(self):
-        if self._container_to_open == None:
-            self.echo(self.TEXT["NO_CONTAINER_TO_OPEN"].format(item=self.name))
+        if self._container_to_open is None:
+            self.echo(self.text("NO_CONTAINER_TO_OPEN"))
 
         # key must be in the same room or in player's inventory to be used
-        elif not self.room == self._container_to_open.room == None and \
+        elif not self.room == self._container_to_open.room and \
             not self.player.location == self._container_to_open.room:
 
-            if not self.room == None:
+            if self.room is not None:
                 item_room = self.room.name
             else:
                 item_room = self.player.location.name
 
-            self.echo(self.TEXT["CONTAINER_NOT_IN_ROOM"].format(item=self.name,
-                room=item_room))
+            self.echo(self.text("CONTAINER_NOT_IN_ROOM"))
 
         else:
             self._container_to_open.unlock()

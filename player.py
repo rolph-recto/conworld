@@ -3,9 +3,10 @@
 
 from .event import Event
 from .echo import EchoMixin
+from .text_template import TextTemplateMixin
 
 
-class Player(EchoMixin):
+class Player(EchoMixin, TextTemplateMixin):
     """
     represents user
     """
@@ -22,7 +23,7 @@ class Player(EchoMixin):
         "PATH_BLOCKED": "The path {direction}ward is blocked."
     }
 
-    def __init__(self, start_location=None):
+    def __init__(self, start_location=None, inventory=[]):
         super(Player, self).__init__()
 
         # list of items a player has
@@ -32,8 +33,11 @@ class Player(EchoMixin):
         self.location = start_location
 
         # template strings for printing
-        self.text = {}
-        self.text.update(Player.TEXT)
+        self.update_text(Player.TEXT)
+
+        # insert starting inventory items
+        for item in inventory:
+            self._insert(item)
 
         # EVENTS
         # player added an item to inventory
@@ -47,26 +51,34 @@ class Player(EchoMixin):
     def inventory(self):
         return self._inventory
 
+    def context(self, **extra):
+        context = super(Player, self).context(**extra)
+        context.update({
+            "room": self.location.name
+        })
+        return context
+
     def take(self, item):
         """
         add an item to the inventory
         """
         if not item.inventory:
-            self.echo(self.text["TAKE_NOT_INVENTORY"].format(item=item.name))
+            self.echo(self.text("TAKE_NOT_INVENTORY", item=item.name))
+            self.echo(self.text("TAKE_NOT_INVENTORY", item=item.name))
             return
 
-        if not item.owner == None and item.owner.locked:
-            self.echo(self.text["TAKE_IN_LOCKED_CONTAINER"].format(
-                item=item.name, container=item.owner.name))
+        if item.owner is not None and item.owner.locked:
+            self.echo(self.text("TAKE_IN_LOCKED_CONTAINER", item=item.name,
+                container=item.owner.name))
             return
 
         if item in self._inventory:
-            self.echo(self.text["ALREADY_TAKEN"].format(item=item.name))
+            self.echo(self.text("ALREADY_TAKEN", item=item.name))
             return
 
         # if the item is in the container, open the container and
         # take the item out of it
-        if not item.owner == None:
+        if item.owner is not None:
             if not item.owner.opened:
                 item.owner.open()
 
@@ -74,14 +86,14 @@ class Player(EchoMixin):
 
         # the item is "roomless" when it is in the inventory
         self._insert(item)
-        self.echo(self.text["TAKE"].format(item=item.name))
+        self.echo(self.text("TAKE", item=item.name))
         self.on_take_item.trigger()
 
     def _insert(self, item):
         """
         insert an item to inventory without echoing
         """
-        if not item.room == None:
+        if item.room is not None:
             item.room.remove(item)
 
         item.player = self
@@ -99,10 +111,9 @@ class Player(EchoMixin):
         if item in self._inventory:
             self._erase(item)
             self.on_discard_item.trigger()
-            self.echo(self.text["DISCARD"].format(item=item.name,
-                room=self.location.name))
+            self.echo(self.text("DISCARD", item=item.name))
         else:
-            self.echo(self.text["DISCARD"].format(item=item.name))
+            self.echo(self.text("DISCARD", item=item.name))
 
     def _erase(self, item):
         if item in self._inventory:
@@ -130,7 +141,7 @@ class Player(EchoMixin):
         move to another room
         """
         path = self.location.get_path(direction)
-        if not path == None:
+        if path is not None:
             if not path.blocked:
                 # exit current location
                 self.location.exit()
@@ -141,9 +152,9 @@ class Player(EchoMixin):
 
                 self.on_move.trigger()
             else:
-                self.echo(self.text["PATH_BLOCKED"].format(direction=direction))
+                self.echo(self.text("PATH_BLOCKED", direction=direction))
         else:
-            self.echo(self.text["NO_PATH"].format(direction=direction))
+            self.echo(self.text("NO_PATH", direction=direction))
 
     def look(self):
         """

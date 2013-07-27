@@ -59,7 +59,7 @@ class Command(EchoMixin):
         output = cmd_pattern.search(input)
 
         # if the command pattern matches, execute the command!
-        if not output == None:
+        if output is not None:
             self.execute(world, **output.groupdict())
             return True
         else:
@@ -128,14 +128,14 @@ class TakeCommand(Command):
 
     def execute(self, world, item_name):
         # check if the item isn't alerady in the player's inventory
-        if not world.player.get(item_name) == None:
+        if world.player.get(item_name) is not None:
             self.echo(TakeCommand.TEXT["ALREADY_IN_INVENTORY"].format(
                 item=item_name))
         else:
             # check if the item is in the current room
             item = world.player.location.get(item_name)
 
-            if not item == None:
+            if item is not None:
                 world.player.take(item)
             else:
                 self.echo(TakeCommand.TEXT["NO_ITEM"].format(
@@ -159,7 +159,7 @@ class DiscardCommand(Command):
         # check if item is in player's inventory
         item = world.player.get(item_name)
 
-        if not item == None:
+        if item is not None:
             world.player.discard(item)
         else:
             self.echo(DiscardCommand.TEXT["NO_ITEM"].format(item=item_name))
@@ -193,16 +193,16 @@ class PutCommand(Command):
     def execute(self, world, item_name, container_name):
         # find item in room or in player's inventory
         item = world.player.location.get(item_name)
-        if item == None:
+        if item is None:
             item = world.player.get(item_name)
 
         # find container in room or in player's inventory
         container = world.player.location.get(container_name)
-        if container == None:
+        if container is None:
             container = world.player.get(container_name)
 
         # success
-        if not item == None and not container == None:
+        if item is not None and container is not None:
             if container.container:
                 container.add(item)
             else:
@@ -210,7 +210,7 @@ class PutCommand(Command):
                     container=container_name))
 
         # item doesn't exist
-        elif item == None:
+        elif item is None:
             self.echo(PutCommand.TEXT["NO_ITEM"].format(item=item_name,
                 room=world.player.location.name))
         # container doesn't exist
@@ -236,14 +236,14 @@ class RemoveCommand(Command):
     def execute(self, world, item_name, container_name):
         # find item in room or in player's inventory
         item = world.player.location.get(item_name)
-        if item == None:
+        if item is None:
             item = world.player.get(item_name)
 
-        if item == None:
+        if item is None:
             self.echo(RemoveCommand.TEXT["NO_ITEM"].format(item=item_name,
                 room=world.player.location.name))
 
-        elif item.owner == None or not item.owner.name == container_name:
+        elif item.owner is None or not item.owner.name == container_name:
             self.echo(RemoveCommand.TEXT["NO_CONTAINER"].format(item=item_name,
                 container=container_name))
 
@@ -270,7 +270,7 @@ class InventoryCommand(Command):
         # get player inventory
         # only display items not stored in containers
         items = [item.name for item in world.player.inventory
-            if item.owner == None]
+            if item.owner is None]
 
         if len(items) >= 1:
             self.echo(InventoryCommand.TEXT["INVENTORY"].format(
@@ -302,17 +302,17 @@ class ActionCommand(Command):
     def execute(self, world, action_name, item_name):
         # fetch item from current room or in player's inventory
         item = world.player.location.get(item_name)
-        if item == None:
+        if item is None:
             item = world.player.get(item_name)
 
 
-        if item == None:
+        if item is None:
             self.echo(ActionCommand.TEXT["NO_ITEM"].format(item=item_name,
                 room=world.player.location.name))
         else:
             action = item.get_action(action_name)
 
-            if action == None:
+            if action is None:
                 self.echo(ActionCommand.TEXT["NO_COMMAND"].format(
                     action=action_name, item=item_name))
             # call the action method!

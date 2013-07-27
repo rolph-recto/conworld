@@ -5,11 +5,23 @@
 DIRECTIONS = ("north", "south", "east", "west", "up", "down")
 DIRECTION_SYNONYMS = {
     "n": "north",
+    "northward": "north",
+    "northwards": "north",
     "s": "south",
+    "southward": "south",
+    "southwards": "south",
     "e": "east",
+    "eastward": "east",
+    "eastwards": "east",
     "w": "west",
+    "westward": "west",
+    "westwards": "west",
     "u": "up",
-    "d": "down"
+    "upward": "up",
+    "upwards": "up",
+    "d": "down",
+    "downward": "down",
+    "downwards": "down"
 }
 
 # words that should be removed from a command string
