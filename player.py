@@ -64,7 +64,6 @@ class Player(EchoMixin, TextTemplateMixin):
         """
         if not item.inventory:
             self.echo(self.text("TAKE_NOT_INVENTORY", item=item.name))
-            self.echo(self.text("TAKE_NOT_INVENTORY", item=item.name))
             return
 
         if item.owner is not None and item.owner.locked:

@@ -4,6 +4,7 @@
 from .event import Event
 from .echo import EchoMixin
 from .text_template import TextTemplateMixin
+from .path import Path
 
 
 class AbstractItem(EchoMixin):
@@ -534,8 +535,8 @@ class Key(Item):
     """
 
     TEXT = {
-        "NO_CONTAINER_TO_OPEN": "{name} doesn't unlock anything.",
-        "CONTAINER_NOT_IN_ROOM": "{name} doesn't open anything in the {room}."
+        "NO_CONTAINER_TO_OPEN": "You use the {name} but nothing happens.",
+        "CONTAINER_NOT_IN_ROOM": "You use the {name} but nothing happens."
     }
 
     def __init__(self, name, synonyms=(), description="",
@@ -580,4 +581,60 @@ class Key(Item):
 
         else:
             self._container_to_open.unlock()
+            self.on_use.trigger()
+
+
+
+class PathKey(Item):
+    """
+    item that blocks/unblocks a path
+    """
+
+    TEXT = {
+        "NO_PATH_TO_OPEN": "You use the {name} but nothing happens.",
+        "PATH_NOT_IN_ROOM": "You use the {name} but nothing happens."
+    }
+
+    def __init__(self, name, synonyms=(), description="",
+        path=None, inventory=True, containable=True,
+        container=False, text={}):
+
+        super(PathKey, self).__init__(name, synonyms, description,
+            inventory=inventory, containable=containable, container=container)
+
+        self._path = None
+        self.path = path
+
+        # text templates
+        self.update_text(PathKey.TEXT)
+        self.update_text(text)
+
+    @property
+    def path(self):
+        return self._path
+
+    @path.setter
+    def path(self, path):
+        if path is None or isinstance(path, Path):
+            self._path = path
+        else:
+            raise TypeError("Tried to set non-path as item to open")
+
+    def use(self):
+        if self._path is None:
+            self.echo(self.text("NO_PATH_TO_OPEN"))
+
+        # key must be in the same room or in player's inventory to be used
+        elif not self.room == self._path.source and \
+            not self.player.location == self._path.source:
+
+            if self.room is not None:
+                item_room = self.room.name
+            else:
+                item_room = self.player.location.name
+
+            self.echo(self.text("PATH_NOT_IN_ROOM"))
+
+        else:
+            self._path.toggle()
             self.on_use.trigger()
