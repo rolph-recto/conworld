@@ -260,19 +260,14 @@ class Room(AbstractRoom, TextTemplateMixin):
         self.echo(self.text("DESCRIPTION"))
 
         # describe paths
-        look_path = ""
         for direction, path in self._paths.iteritems():
             if path is not None:
                 if not path.blocked:
-                    look_path += self.text("LOOK_PATH",
-                        path=path.name, direction=direction,
-                        destination=path.destination) + " "
+                    self.echo(self.text("LOOK_PATH", path=path.name, 
+                        direction=direction, destination=path.destination))
                 else:
-                    look_path += self.text("LOOK_PATH_BLOCKED",
-                        path=path.name, direction=direction,
-                        destination=path.destination) + " "
-
-        self.echo(look_path)
+                    self.echo(self.text("LOOK_PATH_BLOCKED", path=path.name, 
+                        direction=direction, destination=path.destination))
 
         # multiple items in container
         visible_items = [item for item in self._items if item.owner is None]
