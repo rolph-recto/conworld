@@ -171,7 +171,7 @@ class PutCommand(Command):
     """
     # use custom stopword list -- omit "in" because we use that in the pattern
     CUSTOM_STOPWORDS = ["the", "a", "at", "to", "room", "around"]
-    PATTERN = (r"^(put|place) (?P<item_name>[\w\d\s]+) in "
+    PATTERN = (r"^(put|place) (?P<item_name>[\w\d\s]+) (in|inside) "
         r"(?P<container_name>[\w\d\s]+)")
     TEXT = {
         "NO_ITEM": "There is no {item} in the {room} or in your inventory.",
