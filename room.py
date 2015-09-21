@@ -33,6 +33,7 @@ class Path(EchoMixin, TextTemplateMixin):
         # (ex. the gate is "opened" or "closed"
         # we use arguments for the verbs because subclassing path
         # just to change the verbs would be a little excessive
+        self.update_text(Path.TEXT)
         self.update_text(text)
 
         # EVENTS
@@ -53,7 +54,7 @@ class Path(EchoMixin, TextTemplateMixin):
         return self._blocked
 
     def context(self, **extra):
-        context = super(Room, self).context(**extra)
+        context = super(Path, self).context(**extra)
         context.update({
             "path": self._name,
             "destination": self._destination.name
@@ -69,7 +70,7 @@ class Path(EchoMixin, TextTemplateMixin):
             if echo: self.echo(self.text("BLOCK"))
             self.on_block.trigger()
         else:
-            self.echo(self.text("ALREADY_UNBLOCKED"))
+            self.echo(self.text("ALREADY_BLOCKED"))
 
     def unblock(self, echo=True):
         """
@@ -80,7 +81,7 @@ class Path(EchoMixin, TextTemplateMixin):
             if echo: self.echo(self.text("UNBLOCK"))
             self.on_unblock.trigger()
         else:
-            self.echo(self.text("ALREADY_BLOCKED"))
+            self.echo(self.text("ALREADY_UNBLOCKED"))
 
     def toggle(self, echo=True):
         """
